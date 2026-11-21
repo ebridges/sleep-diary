@@ -92,6 +92,9 @@ enum Fmt {
 
 enum SettingsKeys {
     static let defaultMedicationName = "defaultMedicationName"
+    static let defaultMedicationDose = "defaultMedicationDose"
+    /// Minutes after midnight.
+    static let defaultMedicationMinutes = "defaultMedicationMinutes"
     static let defaultCaffeineMg = "defaultCaffeineMg"
     static let writeSleepToHealth = "writeSleepToHealth"
     static let preferredSource = "preferredSource"

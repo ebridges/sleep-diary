@@ -9,6 +9,8 @@ struct MedicationView: View {
     let onDone: () -> Void
 
     @AppStorage(SettingsKeys.defaultMedicationName) private var medicationName = ""
+    @AppStorage(SettingsKeys.defaultMedicationDose) private var usualDose = ""
+    @AppStorage(SettingsKeys.defaultMedicationMinutes) private var usualMinutes = 22 * 60 + 30
     @AppStorage(SettingsKeys.writeSleepToHealth) private var writeNaps = false
 
     private enum Choice { case confirmHealth, editHealth, addManually, didNotTake }
@@ -139,11 +141,29 @@ struct MedicationView: View {
     private func missingCard(_ lookup: MedicationLookup) -> some View {
         VStack(alignment: .leading, spacing: 18) {
             Card {
-                Text("No \(medicationName.lowercased()) found for \(Fmt.weekday(checkIn.night)) night")
+                Text("No \(medicationName) dose found for \(Fmt.weekday(checkIn.night)) night")
                     .font(.system(size: 15, weight: .semibold))
                 Text(missingExplanation(lookup))
                     .font(.system(size: 14))
                     .foregroundStyle(Theme.secondary)
+                if case .noMatch(let names) = lookup {
+                    ForEach(names, id: \.self) { name in
+                        Button {
+                            medicationName = name   // re-runs the lookup
+                        } label: {
+                            HStack {
+                                Text(name).multilineTextAlignment(.leading)
+                                Spacer()
+                                Text("Use this").foregroundStyle(Theme.accent)
+                            }
+                            .font(.system(size: 15, weight: .medium))
+                            .padding(.horizontal, 14)
+                            .frame(minHeight: 44)
+                            .background(Theme.cardRaised, in: RoundedRectangle(cornerRadius: 12))
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
                 FlowRow {
                     Chip(title: "Add usual dose", selected: choice == .addManually) { choice = .addManually }
                     Chip(title: "Didn't take it", selected: choice == .didNotTake) { choice = .didNotTake }
@@ -155,7 +175,7 @@ struct MedicationView: View {
                         .foregroundStyle(Theme.secondary)
                 }
             }
-            if lookup == .notShared {
+            if lookup.offersSharing {
                 Button("Choose medications to share") {
                     Task { await checkIn.requestMedicationAccess(name: medicationName) }
                 }
@@ -171,17 +191,30 @@ struct MedicationView: View {
     }
 
     private func missingExplanation(_ lookup: MedicationLookup) -> String {
-        let usual = checkIn.d.medicationDose.isEmpty
-            ? "Your usual time is around \(Fmt.time(checkIn.d.medicationTime))."
-            : "Your usual is \(checkIn.d.medicationDose) around \(Fmt.time(checkIn.d.medicationTime))."
+        let usual = usualAmount.isEmpty
+            ? "Your usual time is around \(Fmt.time(usualTime))."
+            : "Your usual is \(usualAmount) around \(Fmt.time(usualTime))."
         switch lookup {
         case .unsupported:
             return "Reading Health's Medications needs iOS 26. \(usual)"
         case .notShared:
-            return "Health isn't sharing a medication named \(medicationName) with Sleep Diary. \(usual)"
+            return "Sleep Diary can only see medications you choose to share with it. Tap Choose medications to share and turn on \(medicationName). \(usual)"
+        case .noMatch:
+            return "Health is sharing these medications, but none matches \"\(medicationName)\" from Settings. Tap the one you mean:"
+        case .failed(let message):
+            return "Couldn't read Health's Medications: \(message). \(usual)"
         default:
             return "Nothing was logged as taken that evening. \(usual)"
         }
+    }
+
+    /// The usual dose from Settings, else the last one recorded.
+    private var usualAmount: String {
+        usualDose.isEmpty ? checkIn.d.medicationDose : usualDose
+    }
+
+    private var usualTime: Date {
+        TimeResolver.at(hour: usualMinutes / 60, minute: usualMinutes % 60, night: checkIn.night, anchor: .evening)
     }
 
     // MARK: Shared
@@ -228,8 +261,9 @@ struct MedicationView: View {
             amount = dose.amount
             choice = .confirmHealth
         default:
-            time = checkIn.d.medicationTime
-            amount = checkIn.d.medicationDose
+            let done = checkIn.isDone(.medication) && checkIn.d.tookMedication
+            time = done ? checkIn.d.medicationTime : usualTime
+            amount = done ? checkIn.d.medicationDose : usualAmount
             if checkIn.isDone(.medication) {
                 choice = checkIn.d.tookMedication ? .addManually : .didNotTake
             }

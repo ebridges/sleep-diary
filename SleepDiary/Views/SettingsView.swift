@@ -5,6 +5,8 @@ struct SettingsView: View {
     @Environment(HealthManager.self) private var health
 
     @AppStorage(SettingsKeys.defaultMedicationName) private var defaultMedicationName = ""
+    @AppStorage(SettingsKeys.defaultMedicationDose) private var defaultMedicationDose = ""
+    @AppStorage(SettingsKeys.defaultMedicationMinutes) private var defaultMedicationMinutes = 22 * 60 + 30
     @State private var accessMessage: String?
     @AppStorage(SettingsKeys.defaultCaffeineMg) private var defaultCaffeineMg = 95.0
     @AppStorage(SettingsKeys.writeSleepToHealth) private var writeSleep = false
@@ -18,10 +20,13 @@ struct SettingsView: View {
                 Section {
                     TextField("Name as shown in the Health app", text: $defaultMedicationName)
                         .autocorrectionDisabled()
+                    TextField("Usual dose, e.g. 1 tablet", text: $defaultMedicationDose)
+                    DatePicker("Usual time", selection: minutesBinding($defaultMedicationMinutes),
+                               displayedComponents: .hourAndMinute)
                 } header: {
                     Text("Evening medication")
                 } footer: {
-                    Text("The morning check-in looks for this medication's evening dose in Apple Health's Medications. Use the name or nickname shown in the Health app. Leave it empty if you don't take one.")
+                    Text("The check-in looks for this medication's evening dose in Apple Health's Medications. Use the name or nickname shown in the Health app. The usual dose and time fill in \"Add usual dose\" when Health has nothing logged. Leave the name empty if you don't take one.")
                 }
 
                 Section("Defaults for new nights") {
@@ -67,6 +72,19 @@ struct SettingsView: View {
             .onChange(of: reminderEnabled) { updateReminder() }
             .onChange(of: reminderMinutes) { updateReminder() }
         }
+    }
+
+    private func minutesBinding(_ minutes: Binding<Int>) -> Binding<Date> {
+        Binding(
+            get: {
+                Calendar.current.date(bySettingHour: minutes.wrappedValue / 60, minute: minutes.wrappedValue % 60,
+                                      second: 0, of: Date()) ?? Date()
+            },
+            set: {
+                let c = Calendar.current.dateComponents([.hour, .minute], from: $0)
+                minutes.wrappedValue = (c.hour ?? 0) * 60 + (c.minute ?? 0)
+            }
+        )
     }
 
     private var reminderTime: Binding<Date> {

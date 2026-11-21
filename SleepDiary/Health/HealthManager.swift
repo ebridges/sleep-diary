@@ -14,12 +14,26 @@ enum MedicationLookup: Equatable {
     case found(MedicationDose)
     /// The medication is shared with the app but has no dose logged as taken that evening.
     case noDose
-    /// No shared medication matches the name (or the user hasn't shared any).
+    /// The user hasn't shared any medications with the app.
     case notShared
+    /// Medications are shared, but none matches the name in Settings. Holds their names.
+    case noMatch(shared: [String])
+    /// Reading Medications failed.
+    case failed(String)
     /// Medications need iOS 26.
     case unsupported
     /// No medication is set in Settings, so there's nothing to look for.
     case notSet
+}
+
+extension MedicationLookup {
+    /// Sharing more medications in Health could change the result.
+    var offersSharing: Bool {
+        switch self {
+        case .notShared, .noMatch: return true
+        default: return false
+        }
+    }
 }
 
 /// What happened when the app asked for Health access.
@@ -319,7 +333,7 @@ final class HealthManager {
             return try await readEveningDose(forNight: night, matching: name)
         } catch {
             lastError = error.localizedDescription
-            return .notShared
+            return .failed(error.localizedDescription)
         }
         #endif
     }
@@ -328,11 +342,10 @@ final class HealthManager {
     private func readEveningDose(forNight night: Date, matching name: String) async throws -> MedicationLookup {
         let want = name.trimmingCharacters(in: .whitespaces)
         let meds = try await HKUserAnnotatedMedicationQueryDescriptor().result(for: store)
-        let match = meds.first { m in
-            m.medication.displayText.localizedCaseInsensitiveContains(want)
-                || (m.nickname?.localizedCaseInsensitiveContains(want) ?? false)
+        guard !meds.isEmpty else { return .notShared }
+        guard let med = meds.first(where: { Self.matches($0, name: want) }) else {
+            return .noMatch(shared: meds.map { $0.nickname ?? $0.medication.displayText })
         }
-        guard let med = match else { return .notShared }
 
         let base = Calendar.current.startOfDay(for: night)
         let start = base.addingTimeInterval(16 * 3600)
@@ -353,6 +366,26 @@ final class HealthManager {
         return .found(MedicationDose(name: displayName,
                                      amount: Self.amountText(event.doseQuantity, form: med.medication.generalForm),
                                      time: event.startDate))
+    }
+
+    /// Health's display text often adds strength and form ("… 50 mg Oral Tablet") or
+    /// abbreviates ("HCl"), so match loosely: either name contains the other, or
+    /// they share a word of 5+ letters.
+    @available(iOS 26.0, *)
+    private static func matches(_ med: HKUserAnnotatedMedication, name: String) -> Bool {
+        func words(_ s: String) -> [String] {
+            s.lowercased().components(separatedBy: CharacterSet.alphanumerics.inverted).filter { !$0.isEmpty }
+        }
+        let want = words(name)
+        guard !want.isEmpty else { return false }
+        let wantText = want.joined(separator: " ")
+        for candidate in [med.medication.displayText, med.nickname].compactMap({ $0 }) {
+            let have = words(candidate)
+            let haveText = have.joined(separator: " ")
+            if haveText.contains(wantText) || wantText.contains(haveText) { return true }
+            if want.contains(where: { $0.count >= 5 && have.contains($0) }) { return true }
+        }
+        return false
     }
 
     @available(iOS 26.0, *)
