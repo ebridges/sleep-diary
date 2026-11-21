@@ -2,10 +2,12 @@
 
 An iPhone app for a short morning sleep check-in that sits alongside the sleep Apple Watch or AutoSleep records in Apple Health, with a PDF/CSV export to bring to a doctor.
 
-<p>
-  <img src="docs/screenshots/home.png" width="250" alt="Home: last night from Apple Health and the morning check-in steps">
-  <img src="docs/screenshots/last-night.png" width="250" alt="Last night: sleep stages with numbered wake-ups">
-  <img src="docs/screenshots/medication.png" width="250" alt="Medication: what Apple Health recorded and the schedule">
+<p align="center">
+  <img src="docs/screenshots/home.png" width="30%" alt="Home: last night from Apple Health and the morning check-in steps">
+  &nbsp;&nbsp;
+  <img src="docs/screenshots/last-night.png" width="30%" alt="Last night: sleep stages with numbered wake-ups">
+  &nbsp;&nbsp;
+  <img src="docs/screenshots/medication.png" width="30%" alt="Medication: what Apple Health recorded and the schedule">
 </p>
 
 - Morning check-in: how rested and groggy, last night from Health to confirm or correct, caffeine, alcohol and naps, and medications.
