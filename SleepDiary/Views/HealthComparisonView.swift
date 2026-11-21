@@ -10,6 +10,7 @@ struct HealthComparisonView: View {
     @State private var selectedID = ""
     @State private var loading = false
     @State private var errorText: String?
+    @State private var lastChecked: Date?
 
     private var current: NightSleepSummary? {
         summaries.first { $0.sourceID == selectedID } ?? summaries.first
@@ -33,6 +34,11 @@ struct HealthComparisonView: View {
                 if let s = current { grid(s) }
             }
             Button("Refresh from Health") { Task { await load() } }
+            if let lastChecked, !loading {
+                Text("Checked at \(Fmt.time(lastChecked))")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
         } header: {
             Text("Diary vs. Apple Health")
         } footer: {
@@ -75,7 +81,7 @@ struct HealthComparisonView: View {
     @MainActor
     private func load() async {
         loading = true
-        defer { loading = false }
+        defer { loading = false; lastChecked = Date() }
         do {
             summaries = try await health.sleepSummaries(forNight: draft.night)
             errorText = nil
