@@ -16,6 +16,9 @@ struct MedicationView: View {
     @State private var time = Date()
     @State private var amount = ""
     @State private var saving = false
+    @State private var showingSettings = false
+    /// The medication name the current lookup was made for.
+    @State private var lookedUpName: String?
 
     var body: some View {
         StepScaffold(step: .medication, title: "Medication", subtitle: "\(Fmt.weekday(checkIn.night)) evening") {
@@ -25,14 +28,26 @@ struct MedicationView: View {
             case .found(let dose)?:
                 foundCard(dose)
                 foundActions(dose)
+            case .notSet?:
+                notSetCard
             case let lookup?:
                 missingCard(lookup)
             }
         }
-        .task {
-            if checkIn.medication == nil { await checkIn.loadMedication(name: medicationName) }
+        // Re-runs (cancelling the previous lookup) whenever the name in Settings changes.
+        .task(id: medicationName) {
+            if lookedUpName == nil && checkIn.medication != nil {
+                lookedUpName = medicationName   // already loaded earlier in this check-in
+                return
+            }
+            guard lookedUpName != medicationName || checkIn.medication == nil else { return }
+            choice = nil
+            checkIn.medication = nil
+            await checkIn.loadMedication(name: medicationName)
+            if !Task.isCancelled { lookedUpName = medicationName }
         }
         .onChange(of: checkIn.medication) { setUp() }
+        .sheet(isPresented: $showingSettings) { SettingsView() }
         .onAppear { setUp() }
     }
 
@@ -98,6 +113,24 @@ struct MedicationView: View {
                 .buttonStyle(WideButtonStyle(primary: false))
             Button("I didn't take it last night") { save(took: false, fromHealth: false) }
                 .buttonStyle(WideButtonStyle(primary: false))
+        }
+    }
+
+    // MARK: No medication set
+
+    private var notSetCard: some View {
+        VStack(alignment: .leading, spacing: 18) {
+            Card {
+                Text("No medication set").font(.system(size: 15, weight: .semibold))
+                Text("Add the medication you take in the evening in Settings, and the check-in will look for that dose in Apple Health's Medications.")
+                    .font(.system(size: 14))
+                    .foregroundStyle(Theme.secondary)
+            }
+            Button("Open Settings") { showingSettings = true }
+                .buttonStyle(WideButtonStyle(primary: false))
+            Button("Skip") { save(took: false, fromHealth: false) }
+                .buttonStyle(WideButtonStyle())
+                .disabled(saving)
         }
     }
 

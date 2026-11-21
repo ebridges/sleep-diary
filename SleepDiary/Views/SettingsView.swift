@@ -14,8 +14,16 @@ struct SettingsView: View {
     var body: some View {
         NavigationStack {
             Form {
+                Section {
+                    TextField("Name as shown in the Health app", text: $defaultMedicationName)
+                        .autocorrectionDisabled()
+                } header: {
+                    Text("Evening medication")
+                } footer: {
+                    Text("The morning check-in looks for this medication's evening dose in Apple Health's Medications. Use the name or nickname shown in the Health app. Leave it empty if you don't take one.")
+                }
+
                 Section("Defaults for new nights") {
-                    TextField("Medication name", text: $defaultMedicationName)
                     Stepper("\"Other\" caffeine: \(Int(defaultCaffeineMg)) mg",
                             value: $defaultCaffeineMg, in: 0...500, step: 5)
                 }

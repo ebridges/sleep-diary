@@ -148,7 +148,9 @@ final class CheckIn {
     }
 
     func loadMedication(name: String) async {
-        medication = await health.eveningDose(forNight: night, matching: name)
+        let result = await health.eveningDose(forNight: night, matching: name)
+        // A newer lookup (the name changed in Settings) replaces this one.
+        if !Task.isCancelled { medication = result }
     }
 
     func requestMedicationAccess(name: String) async {

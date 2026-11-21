@@ -18,6 +18,8 @@ enum MedicationLookup: Equatable {
     case notShared
     /// Medications need iOS 26.
     case unsupported
+    /// No medication is set in Settings, so there's nothing to look for.
+    case notSet
 }
 
 /// One line of "what was written to Apple Health" for the Saved screen.
@@ -290,6 +292,7 @@ final class HealthManager {
 
     /// The dose of `name` logged as taken between 4 pm on `night` and 4 am after it.
     func eveningDose(forNight night: Date, matching name: String) async -> MedicationLookup {
+        guard !name.trimmingCharacters(in: .whitespaces).isEmpty else { return .notSet }
         #if DEBUG && targetEnvironment(simulator)
         return SampleNight.dose(forNight: night, name: name)
         #else
@@ -309,8 +312,7 @@ final class HealthManager {
         let want = name.trimmingCharacters(in: .whitespaces)
         let meds = try await HKUserAnnotatedMedicationQueryDescriptor().result(for: store)
         let match = meds.first { m in
-            want.isEmpty
-                || m.medication.displayText.localizedCaseInsensitiveContains(want)
+            m.medication.displayText.localizedCaseInsensitiveContains(want)
                 || (m.nickname?.localizedCaseInsensitiveContains(want) ?? false)
         }
         guard let med = match else { return .notShared }
