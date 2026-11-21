@@ -10,7 +10,18 @@ struct CaffeineItem: Codable, Identifiable, Hashable {
     var mg: Double
     /// Read from another app's Health sample; never written back.
     var fromHealth: Bool? = nil
+    /// How many of `label` (e.g. 2 × "Espresso, double"); `mg` is the total. Nil means 1.
+    var servings: Double? = nil
+
     var isFromHealth: Bool { fromHealth == true }
+    var servingCount: Double { servings ?? 1 }
+
+    /// Changes the number of servings and scales the total caffeine with it.
+    mutating func setServings(_ n: Double) {
+        let perServing = mg / servingCount
+        servings = n
+        mg = (perServing * n).rounded()
+    }
 }
 
 struct AlcoholItem: Codable, Identifiable, Hashable {
@@ -66,12 +77,30 @@ struct CaffeinePreset: Identifiable {
     let mg: Double
     var id: String { name }
 
+    /// Typical amounts (USDA figures, rounded). Drip coffee is about 40 mg per 100 ml.
     static let all: [CaffeinePreset] = [
-        .init(name: "Coffee", mg: 95),
-        .init(name: "Espresso", mg: 64),
-        .init(name: "Tea", mg: 47),
-        .init(name: "Cola", mg: 34),
+        .init(name: "Espresso, single", mg: 64),
+        .init(name: "Espresso, double", mg: 128),
+        .init(name: "Drip coffee, 240 ml", mg: 95),
+        .init(name: "Drip coffee, 300 ml", mg: 120),
+        .init(name: "Tea, 240 ml", mg: 47),
+        .init(name: "Cola, 355 ml can", mg: 34),
     ]
+}
+
+/// Puts a caffeine amount in everyday terms.
+enum CaffeineGuide {
+    static let mgPerMlOfDripCoffee = 0.4
+    static let mgPerEspressoShot = 64.0
+
+    /// e.g. "about as much as 300 ml of drip coffee, or 2 espresso shots"
+    static func describe(_ mg: Double) -> String {
+        let ml = Int((mg / mgPerMlOfDripCoffee / 10).rounded()) * 10
+        let halfShots = Int((mg / mgPerEspressoShot * 2).rounded())
+        let shots = halfShots % 2 == 0 ? "\(halfShots / 2)" : "\(halfShots / 2)½"
+        let shotWord = halfShots == 2 ? "shot" : "shots"
+        return "about as much as \(ml) ml of drip coffee, or \(shots) espresso \(shotWord)"
+    }
 }
 
 // MARK: - Editable draft (what the editor works on)

@@ -29,9 +29,19 @@ struct SettingsView: View {
                     Text("The check-in looks for this medication's evening dose in Apple Health's Medications. Use the name or nickname shown in the Health app. The usual dose and time fill in \"Add usual dose\" when Health has nothing logged. Leave the name empty if you don't take one.")
                 }
 
-                Section("Defaults for new nights") {
-                    Stepper("\"Other\" caffeine: \(Int(defaultCaffeineMg)) mg",
-                            value: $defaultCaffeineMg, in: 0...500, step: 5)
+                Section {
+                    Stepper(value: $defaultCaffeineMg, in: 10...500, step: 10) {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("\"Other\" caffeine: \(Int(defaultCaffeineMg)) mg")
+                            Text(CaffeineGuide.describe(defaultCaffeineMg))
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                } header: {
+                    Text("Defaults for new nights")
+                } footer: {
+                    Text("The starting amount for \"Other\" in the caffeine list. For reference: drip coffee has about 40 mg per 100 ml (a 300 ml cup is about 120 mg), an espresso shot about 64 mg, 240 ml of black tea about 47 mg, and a can of cola about 34 mg.")
                 }
 
                 Section {

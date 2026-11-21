@@ -10,6 +10,7 @@ struct YesterdayView: View {
     @State private var saving = false
 
     private static let drinkKinds = ["Beer", "Wine", "Spirits"]
+    private static let otherCaffeineLabel = "Other"
 
     var body: some View {
         StepScaffold(step: .yesterday, title: "Yesterday",
@@ -49,20 +50,28 @@ struct YesterdayView: View {
                  : "From Apple Health. Tap to add anything else you had.")
                 .font(.system(size: 14))
                 .foregroundStyle(Theme.secondary)
-            ForEach($checkIn.d.caffeine) { $item in
+            ForEach(checkIn.d.caffeine) { item in
                 if item.isFromHealth {
                     itemRow(title: "\(Int(item.mg)) mg", detail: item.label) {
                         Text(Fmt.time(item.time)).monospacedDigit().foregroundStyle(Theme.secondary)
                     }
-                } else {
-                    itemRow(title: item.label, detail: nil) {
-                        Stepper("\(Int(item.mg)) mg", value: $item.mg, in: 5...1000, step: 5)
+                } else if item.label == Self.otherCaffeineLabel {
+                    // A drink without a preset: set the caffeine directly.
+                    itemRow(title: "Other, \(Int(item.mg)) mg", detail: CaffeineGuide.describe(item.mg)) {
+                        Stepper("\(Int(item.mg)) mg", value: binding(\.caffeine, item).mg, in: 10...1000, step: 10)
                             .labelsHidden()
-                        Text("\(Int(item.mg)) mg").monospacedDigit().frame(width: 56, alignment: .trailing)
-                        timePicker($item.time)
-                        DeleteButton(label: "Remove \(item.label)") {
-                            checkIn.d.caffeine.removeAll { $0.id == item.id }
-                        }
+                        Spacer()
+                        timePicker(binding(\.caffeine, item).time)
+                        DeleteButton(label: "Remove \(item.label)") { remove(\.caffeine, item.id) }
+                    }
+                } else {
+                    // A preset drink: count servings; the mg follows.
+                    itemRow(title: item.label, detail: "\(Int(item.mg)) mg in total") {
+                        Stepper("\(Fmt.number(item.servingCount))", value: servingsBinding(item), in: 0.5...10, step: 0.5)
+                            .labelsHidden()
+                        Text("× \(Fmt.number(item.servingCount))").monospacedDigit().frame(width: 44, alignment: .trailing)
+                        timePicker(binding(\.caffeine, item).time)
+                        DeleteButton(label: "Remove \(item.label)") { remove(\.caffeine, item.id) }
                     }
                 }
             }
@@ -72,8 +81,11 @@ struct YesterdayView: View {
                         addCaffeine(preset.name, preset.mg)
                     }
                 }
-                Chip(title: "Other", selected: false) { addCaffeine("Other", otherCaffeineMg) }
+                Chip(title: "Other", selected: false) { addCaffeine(Self.otherCaffeineLabel, otherCaffeineMg) }
             }
+            Text("Tap a drink to add it, then set the time. Use − / + for more than one at the same time. Drip coffee has about 40 mg per 100 ml; use Other for anything else.")
+                .font(.system(size: 13))
+                .foregroundStyle(Theme.secondary)
             Chip(title: "None yesterday", selected: checkIn.d.caffeine.isEmpty) {
                 checkIn.d.caffeine.removeAll { !$0.isFromHealth }
             }
@@ -98,22 +110,20 @@ struct YesterdayView: View {
                     }
                 }
             }
-            ForEach($checkIn.d.alcohol) { $item in
+            ForEach(checkIn.d.alcohol) { item in
                 itemRow(title: item.kind ?? "Drink", detail: nil) {
-                    Stepper("\(Fmt.number(item.drinks))", value: $item.drinks, in: 0.5...20, step: 0.5)
+                    Stepper("\(Fmt.number(item.drinks))", value: binding(\.alcohol, item).drinks, in: 0.5...20, step: 0.5)
                         .labelsHidden()
-                    Text("× \(Fmt.number(item.drinks))").monospacedDigit().frame(width: 40, alignment: .trailing)
-                    timePicker($item.time)
-                    DeleteButton(label: "Remove \(item.kind ?? "drink")") {
-                        checkIn.d.alcohol.removeAll { $0.id == item.id }
-                    }
+                    Text("\(Fmt.number(item.drinks)) drink\(item.drinks == 1 ? "" : "s")")
+                        .monospacedDigit()
+                        .frame(width: 72, alignment: .trailing)
+                    timePicker(binding(\.alcohol, item).time)
+                    DeleteButton(label: "Remove \(item.kind ?? "drink")") { remove(\.alcohol, item.id) }
                 }
             }
-            if checkIn.d.alcohol.isEmpty {
-                Text("Pick a drink to add a count and a time.")
-                    .font(.system(size: 13))
-                    .foregroundStyle(Theme.secondary)
-            }
+            Text("Count standard drinks, as Apple Health does: one is a 12 oz (355 ml) beer at 5%, a 5 oz (150 ml) glass of wine at 12%, or a 1.5 oz (44 ml) shot of spirits. A large glass of wine or a strong beer can be 1.5 to 2.")
+                .font(.system(size: 13))
+                .foregroundStyle(Theme.secondary)
         }
     }
 
@@ -128,13 +138,13 @@ struct YesterdayView: View {
                     checkIn.d.naps.append(NapItem(start: defaultTime(hour: 15), minutes: 20))
                 }
             }
-            ForEach($checkIn.d.naps) { $nap in
+            ForEach(checkIn.d.naps) { nap in
                 itemRow(title: "Nap", detail: nil) {
-                    Stepper(Fmt.hm(Double(nap.minutes)), value: $nap.minutes, in: 5...300, step: 5)
+                    Stepper(Fmt.hm(Double(nap.minutes)), value: binding(\.naps, nap).minutes, in: 5...300, step: 5)
                         .labelsHidden()
                     Text(Fmt.hm(Double(nap.minutes))).monospacedDigit().frame(width: 56, alignment: .trailing)
-                    timePicker($nap.start)
-                    DeleteButton(label: "Remove nap") { checkIn.d.naps.removeAll { $0.id == nap.id } }
+                    timePicker(binding(\.naps, nap).start)
+                    DeleteButton(label: "Remove nap") { remove(\.naps, nap.id) }
                 }
             }
             Text(writeNaps
@@ -146,6 +156,39 @@ struct YesterdayView: View {
     }
 
     // MARK: Helpers
+
+    /// A binding to one item of a draft list, found by ID each time.
+    ///
+    /// Rows don't use `ForEach($list)`: deleting from a closure that reads the
+    /// row's binding accesses `checkIn.d` while it's being modified, and Swift's
+    /// exclusivity check stops the app.
+    private func binding<T: Identifiable>(_ list: WritableKeyPath<EntryDraft, [T]>, _ item: T) -> Binding<T> {
+        let id = item.id
+        return Binding(
+            get: { checkIn.d[keyPath: list].first { $0.id == id } ?? item },
+            set: { newValue in
+                if let i = checkIn.d[keyPath: list].firstIndex(where: { $0.id == id }) {
+                    checkIn.d[keyPath: list][i] = newValue
+                }
+            }
+        )
+    }
+
+    private func servingsBinding(_ item: CaffeineItem) -> Binding<Double> {
+        let row = binding(\.caffeine, item)
+        return Binding(
+            get: { row.wrappedValue.servingCount },
+            set: { n in
+                var updated = row.wrappedValue
+                updated.setServings(n)
+                row.wrappedValue = updated
+            }
+        )
+    }
+
+    private func remove<T: Identifiable>(_ list: WritableKeyPath<EntryDraft, [T]>, _ id: T.ID) {
+        checkIn.d[keyPath: list].removeAll { $0.id == id }
+    }
 
     private func itemRow<Trailing: View>(title: String, detail: String?,
                                          @ViewBuilder trailing: () -> Trailing) -> some View {
