@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Check-in step 4: how rested (app only, 1 to 5) and how groggy (written to
+/// Check-in step 1: how rested (app only, 1 to 5) and how groggy (written to
 /// Health as Fatigue at the final wake time), plus a note.
 struct MorningView: View {
     @Bindable var checkIn: CheckIn
@@ -51,7 +51,7 @@ struct MorningView: View {
                     .padding(12)
                     .background(Theme.cardRaised, in: RoundedRectangle(cornerRadius: 12))
             }
-            Button("Finish check-in") {
+            Button(checkIn.route(after: .morning) == .saved ? "Finish check-in" : "Next") {
                 guard let rested, let groggy else { return }
                 checkIn.d.rested = rested
                 checkIn.d.grogginess = groggy

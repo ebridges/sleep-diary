@@ -4,7 +4,7 @@ import Observation
 
 /// The four steps of the morning check-in, in order.
 enum CheckInStep: Int, CaseIterable, Identifiable, Hashable {
-    case medication, lastNight, yesterday, morning
+    case morning, lastNight, yesterday, medication
     var id: Int { rawValue }
 
     var title: String {

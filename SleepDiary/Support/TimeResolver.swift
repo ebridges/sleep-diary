@@ -32,7 +32,17 @@ enum TimeResolver {
         return calendar.date(bySettingHour: hour, minute: minute, second: 0, of: day) ?? day
     }
 
+    /// The night the morning check-in is about: the last night that has ended.
+    /// That's yesterday's date all day, until 4 am, when the night still in
+    /// progress is yesterday's and the last finished one is the day before.
+    static func checkInNight(now: Date = Date()) -> Date {
+        let today = calendar.startOfDay(for: now)
+        let back = calendar.component(.hour, from: now) < 4 ? -2 : -1
+        return calendar.date(byAdding: .day, value: back, to: today) ?? today
+    }
+
     /// Before 3 pm you're probably logging last night; after that, tonight.
+    /// (Used by the v1 editor's "+".)
     static func defaultNight(now: Date = Date()) -> Date {
         let today = calendar.startOfDay(for: now)
         if calendar.component(.hour, from: now) < 15 {

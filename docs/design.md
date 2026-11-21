@@ -8,15 +8,13 @@ The app is a morning check-in for the previous night, plus quick symptom logging
 
 ### Home
 - Summary of last night from Health: time asleep, number of wake-ups (2+ min), time awake, in-bed span, mini hypnogram.
-- Morning check-in list with four steps and done/pending state: Medication, Last night, Yesterday, This morning. "Start check-in" button.
+- Morning check-in list with four steps and done/pending state: This morning, Last night, Yesterday, Medication. "Start check-in" button.
 - "During the day" card with a button to log a symptom now.
 
-### 1. Medication
-- Read the previous evening's medication dose event from Health (HealthKit Medications API, iOS 26: per-medication read authorization; verify API names in Xcode before relying on them).
-- Show name, dose, time taken, and minutes between the dose and Health's fell-asleep time.
-- Actions: "Yes, that's right" / "Change the time or dose" / "I didn't take it last night".
-- Empty state when Health has no dose: "No dose found for Thursday night", with "Add usual dose" and "Didn't take it". HealthKit has no public initializer for HKMedicationDoseEvent, so apps can't write doses; an added dose is kept in the app only.
-- Medications are shared per object: if none is shared, the screen offers "Choose medications to share", which opens Health's picker.
+### 1. This morning
+- "How rested do you feel?" 1 to 5 (1 not at all, 5 fully rested). App only; Health has no type.
+- "How groggy are you?" using Health's four symptom categories: Not present / Mild / Moderate / Severe. Written to Health as Fatigue at the final wake time.
+- Optional note.
 
 ### 2. Last night
 - Hypnogram of the night from Health sleep samples: lanes Awake / REM / Core / Deep, hour axis, numbered pins for each wake-up, green markers for asleep and up. Source picker when more than one source recorded the night (Apple Watch, AutoSleep, ...).
@@ -32,10 +30,12 @@ The app is a morning check-in for the previous night, plus quick symptom logging
 - Alcohol: None / Beer / Wine / Spirits, then count and time.
 - Nap: No nap / Add a nap (start time and length).
 
-### 4. This morning
-- "How rested do you feel?" 1 to 5 (1 not at all, 5 fully rested). App only; Health has no type.
-- "How groggy are you?" using Health's four symptom categories: Not present / Mild / Moderate / Severe. Written to Health as Fatigue at the final wake time.
-- Optional note.
+### 4. Medication
+- Read the previous evening's medication dose event from Health (HealthKit Medications API, iOS 26: per-medication read authorization; verify API names in Xcode before relying on them).
+- Show name, dose, time taken, and minutes between the dose and Health's fell-asleep time.
+- Actions: "Yes, that's right" / "Change the time or dose" / "I didn't take it last night".
+- Empty state when Health has no dose: "No dose found for Thursday night", with "Add usual dose" and "Didn't take it". HealthKit has no public initializer for HKMedicationDoseEvent, so apps can't write doses; an added dose is kept in the app only.
+- Medications are shared per object: if none is shared, the screen offers "Choose medications to share", which opens Health's picker.
 
 ### Saved
 - Recap of the diary for the night, what was written to Health, and what stays in the app. Link to set an afternoon reminder.

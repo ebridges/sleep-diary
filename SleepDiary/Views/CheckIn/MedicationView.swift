@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Check-in step 1: confirm the evening dose Health's Medications recorded.
+/// Check-in step 4: confirm the evening dose Health's Medications recorded.
 ///
 /// HealthKit lets apps read dose events but not create them, so a dose added
 /// here is kept in the diary only.

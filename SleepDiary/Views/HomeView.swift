@@ -95,7 +95,7 @@ struct HomeView: View {
 
     /// Starts a check-in for the most likely night, or a new one once that night changes.
     private func refreshIfNeeded() async {
-        let night = Calendar.current.startOfDay(for: TimeResolver.defaultNight())
+        let night = TimeResolver.checkInNight()
         if let checkIn, Calendar.current.isDate(checkIn.night, inSameDayAs: night) { return }
         path = []
         let fresh = CheckIn(night: night, entries: entries, context: context, health: health,
