@@ -45,7 +45,7 @@ The app is a morning check-in for the previous night, plus quick symptom logging
 - Rate it with the four categories: Not present / Mild / Moderate / Severe (no 1 to 5 scale).
 - Time defaults to now, editable.
 - Today's log list (time, symptom, category).
-- Each entry is written to Health as a symptom sample with the same severity. Sleepiness and grogginess map to Fatigue.
+- Each entry is written to Health as a symptom sample with the same severity. Sleepiness and grogginess map to Fatigue. HealthKit has no Dry Mouth type, so dry mouth and Other stay in the app.
 
 ## Apple Health mapping
 
@@ -57,7 +57,7 @@ Read:
 Write:
 - Dietary Caffeine (mg at time), Alcoholic Beverages (count at time).
 - Sleep Analysis asleep samples for naps only.
-- Symptoms with HKCategoryValueSeverity (notPresent, mild, moderate, severe): Fatigue (morning grogginess, daytime sleepiness/grogginess), Dizziness, Headache, Dry Mouth.
+- Symptoms with HKCategoryValueSeverity (notPresent, mild, moderate, severe): Fatigue (morning grogginess, daytime sleepiness/grogginess), Dizziness, Headache. (No Dry Mouth type exists in HealthKit.)
 - Medications: nothing (HealthKit doesn't let apps create dose events).
 
 App only:

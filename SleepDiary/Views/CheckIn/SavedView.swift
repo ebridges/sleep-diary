@@ -7,6 +7,8 @@ struct SavedView: View {
     let onDone: () -> Void
 
     @Query(sort: \DiaryEntry.night, order: .reverse) private var entries: [DiaryEntry]
+    @State private var reminderAt: Date?
+    @State private var reminderRefused = false
 
     private var d: EntryDraft { checkIn.d }
 
@@ -60,11 +62,37 @@ struct SavedView: View {
 
                 Button("Done", action: onDone)
                     .buttonStyle(WideButtonStyle())
+                reminderLink
             }
             .padding(20)
         }
         .nightStyle()
         .navigationBarBackButtonHidden(true)
+        .task { reminderAt = await Reminder.pendingAfternoon() }
+    }
+
+    @ViewBuilder
+    private var reminderLink: some View {
+        if let reminderAt {
+            Label("Reminder set for \(Fmt.time(reminderAt))", systemImage: "bell")
+                .font(.system(size: 15))
+                .foregroundStyle(Theme.secondary)
+                .frame(minHeight: 44)
+        } else if reminderRefused {
+            Text("Notifications are off for Sleep Diary. Turn them on in Settings › Notifications.")
+                .font(.system(size: 14))
+                .foregroundStyle(Theme.secondary)
+                .multilineTextAlignment(.center)
+        } else {
+            Button("Remind me to log how I feel this afternoon") {
+                Task {
+                    reminderAt = await Reminder.scheduleAfternoon()
+                    reminderRefused = reminderAt == nil
+                }
+            }
+            .foregroundStyle(Theme.accent)
+            .frame(minHeight: 44)
+        }
     }
 
     private func row(_ label: String, _ value: String) -> some View {

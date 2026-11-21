@@ -12,7 +12,8 @@ Personal iPhone app (SwiftUI, SwiftData, HealthKit, iOS 17+ target) for a nightl
 ## Current state
 - The project builds cleanly (Xcode 27). The v1 single editor form (`EntryEditorView`) still exists alongside the redesign.
 - Done from the redesign: Home (`Views/HomeView.swift`) and the morning check-in (`Views/CheckIn/`): Medication, Last night, Yesterday, This morning, Saved. `CheckIn` holds one night's draft and Health data; each step's confirm saves the entry, stamps that step's `…ConfirmedAt`, and re-syncs Health. `EntryListView` ("All nights") and the v1 editor are reached from Home.
-- Not done yet: daytime symptom logging (and Home's "During the day" card), the afternoon reminder link on Saved, and the export changes for the new fields.
+- Daytime logging: `SymptomEntry` (its own SwiftData model, one per logged symptom) and `Views/DaytimeView.swift`, opened from Home's "During the day" card or by tapping the afternoon reminder that Saved can schedule (`Reminder.scheduleAfternoon`, routed through `AppDelegate` and `NotificationRouter`). Sleepiness and grogginess are written as Fatigue, dizziness and headache as themselves; HealthKit has no Dry Mouth type, so dry mouth and Other stay in the app. The export has a "Daytime log" column with the day-after entries.
+- Not done yet: export columns for the other new check-in fields (fall-asleep feel, out of bed, added wake-ups).
 - Medications: read-only. `HKMedicationDoseEvent` can't be created by apps, so a dose added in the app stays in the app. Medication read access is per object (`requestPerObjectReadAuthorization`), offered only from the Medication screen because it prompts every time. Not yet tried on a device.
 - `docs/design.md` describes the redesign to implement next: a step-by-step morning check-in (medication from Health, hypnogram with confirm/correct, intake, morning ratings), plus daytime symptom logging.
 - Notable changes from v1 to apply:

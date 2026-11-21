@@ -1,7 +1,9 @@
 import SwiftUI
+import SwiftData
 
 struct ExportView: View {
     let entries: [DiaryEntry]
+    @Query(sort: \SymptomEntry.time) private var symptoms: [SymptomEntry]
 
     @Environment(\.dismiss) private var dismiss
     @Environment(HealthManager.self) private var health
@@ -76,8 +78,13 @@ struct ExportView: View {
         for entry in selected {
             let d = entry.draft
             let summaries = (try? await health.sleepSummaries(forNight: d.night)) ?? []
-            rows.append(ExportRow(draft: d, health: NightSleepSummary.pick(from: summaries,
-                                                                            preferred: preferredSource)))
+            let nextDay = Calendar.current.date(byAdding: .day, value: 1, to: d.night) ?? d.night
+            let daytime = symptoms
+                .filter { Calendar.current.isDate($0.time, inSameDayAs: nextDay) }
+                .map { "\(Fmt.time($0.time)) \($0.name) \($0.severity.label)" }
+            rows.append(ExportRow(draft: d,
+                                  health: NightSleepSummary.pick(from: summaries, preferred: preferredSource),
+                                  daytime: daytime))
         }
         do {
             files = try Exporter.write(rows: rows)

@@ -4,6 +4,8 @@ import UIKit
 struct ExportRow {
     let draft: EntryDraft
     let health: NightSleepSummary?
+    /// Daytime symptoms logged on the day after the night, e.g. "10:30 Sleepiness Moderate".
+    var daytime: [String] = []
 }
 
 enum Exporter {
@@ -13,7 +15,7 @@ enum Exporter {
         "Bed", "Fell asleep", "To fall asleep", "Wakes", "Awake", "Final wake", "Total sleep",
         "Health source", "H: in bed", "H: asleep", "H: wakes", "H: awake", "H: final wake", "H: total sleep",
         "Caffeine", "Alcohol", "Naps",
-        "Rested (1-5)", "Grogginess", "Daytime sleepiness", "Dizziness", "Other effects", "Notes",
+        "Rested (1-5)", "Grogginess", "Daytime sleepiness", "Dizziness", "Other effects", "Daytime log", "Notes",
     ]
 
     static func values(_ r: ExportRow) -> [String] {
@@ -54,7 +56,7 @@ enum Exporter {
         out += healthCells
         out += [caffeine, alcohol, naps]
         out += [String(d.rested), d.grogginess.label, d.daytimeSleepiness.label, d.dizziness.label]
-        out += [d.otherEffects, d.notes]
+        out += [d.otherEffects, r.daytime.joined(separator: "; "), d.notes]
         return out
     }
 

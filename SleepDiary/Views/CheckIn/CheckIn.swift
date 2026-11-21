@@ -39,6 +39,7 @@ enum CheckInRoute: Hashable {
     case step(CheckInStep)
     case saved
     case history
+    case daytime
 }
 
 /// One night's check-in: the draft every step edits, what Health recorded,

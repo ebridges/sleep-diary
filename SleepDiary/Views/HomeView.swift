@@ -8,6 +8,7 @@ struct HomeView: View {
     @Environment(\.scenePhase) private var scenePhase
     @Environment(HealthManager.self) private var health
     @Query(sort: \DiaryEntry.night, order: .reverse) private var entries: [DiaryEntry]
+    @Query(sort: \SymptomEntry.time, order: .reverse) private var symptoms: [SymptomEntry]
     @AppStorage(SettingsKeys.defaultMedicationName) private var medicationName = ""
     @AppStorage(SettingsKeys.preferredSource) private var preferredSource = ""
 
@@ -24,6 +25,7 @@ struct HomeView: View {
                         summaryCard(checkIn)
                         stepsCard(checkIn)
                         startButton(checkIn)
+                        daytimeCard
                     } else {
                         ProgressView().frame(maxWidth: .infinity, minHeight: 300)
                     }
@@ -54,6 +56,12 @@ struct HomeView: View {
         .onChange(of: scenePhase) {
             if scenePhase == .active { Task { await refreshIfNeeded() } }
         }
+        .onChange(of: NotificationRouter.shared.openDaytime, initial: true) {
+            guard NotificationRouter.shared.openDaytime else { return }
+            NotificationRouter.shared.openDaytime = false
+            showingSettings = false
+            path = [.daytime]
+        }
     }
 
     // MARK: Navigation
@@ -74,6 +82,8 @@ struct HomeView: View {
                 SavedView(checkIn: checkIn) { path = [] }
             case .history:
                 EntryListView()
+            case .daytime:
+                DaytimeView()
             }
         }
     }
@@ -194,6 +204,27 @@ struct HomeView: View {
             Circle()
                 .strokeBorder(Theme.line, lineWidth: 2)
                 .frame(width: 26, height: 26)
+        }
+    }
+
+    private var daytimeCard: some View {
+        let todayCount = symptoms.filter { Calendar.current.isDateInToday($0.time) }.count
+        return Card {
+            HStack(spacing: 12) {
+                Image(systemName: "clock")
+                    .font(.system(size: 20))
+                    .foregroundStyle(Theme.accent)
+                VStack(alignment: .leading, spacing: 1) {
+                    Text("During the day").font(.system(size: 15, weight: .semibold))
+                    Text(todayCount == 0
+                         ? "Log sleepiness, dizziness or other effects when you notice them"
+                         : "\(todayCount) logged today")
+                        .font(.system(size: 13))
+                        .foregroundStyle(Theme.secondary)
+                }
+            }
+            Button("Log how I feel now") { path.append(.daytime) }
+                .buttonStyle(WideButtonStyle(primary: false))
         }
     }
 

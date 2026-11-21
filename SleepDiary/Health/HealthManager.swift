@@ -47,9 +47,10 @@ final class HealthManager {
     static let alcoholType = HKQuantityType(.numberOfAlcoholicBeverages)
     static let fatigueType = HKCategoryType(.fatigue)
     static let dizzinessType = HKCategoryType(.dizziness)
+    static let headacheType = HKCategoryType(.headache)
 
     static var writeTypes: Set<HKSampleType> {
-        [sleepType, caffeineType, alcoholType, fatigueType, dizzinessType]
+        [sleepType, caffeineType, alcoholType, fatigueType, dizzinessType, headacheType]
     }
     static var readTypes: Set<HKObjectType> {
         [sleepType, caffeineType, alcoholType]
@@ -183,6 +184,26 @@ final class HealthManager {
             try await store.save(objects)
         }
         return lines
+    }
+
+    /// Writes one daytime symptom, replacing whatever was written for it before.
+    /// Returns a short description of what happened, for the UI.
+    @discardableResult
+    func sync(_ symptom: SymptomEntry) async throws -> String {
+        guard isAvailable else { return "Apple Health isn't available" }
+        try await deleteSamples(for: symptom.entryID)
+        guard let type = symptom.kind.healthType, let name = symptom.kind.healthName else {
+            return "Kept in Sleep Diary (Health has no type for it)"
+        }
+        guard canWrite(type) else { return "Not allowed in Health settings" }
+        let meta: [String: Any] = [
+            HKMetadataKeyExternalUUID: symptom.entryID.uuidString,
+            HKMetadataKeyWasUserEntered: true,
+        ]
+        let sample = HKCategorySample(type: type, value: severityValue(symptom.severity),
+                                      start: symptom.time, end: symptom.time, metadata: meta)
+        try await store.save(sample)
+        return "Saved to Health as \(name)"
     }
 
     /// Removes everything this app wrote for one diary entry.
