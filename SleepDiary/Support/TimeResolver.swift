@@ -69,6 +69,12 @@ enum Fmt {
         d.formatted(.dateTime.weekday(.abbreviated).month(.abbreviated).day())
     }
 
+    /// A time of day given as minutes after midnight, e.g. "22:00" or "10:00 PM".
+    static func minutes(_ m: Int) -> String {
+        let date = Calendar.current.date(bySettingHour: m / 60, minute: m % 60, second: 0, of: Date()) ?? Date()
+        return time(date)
+    }
+
     /// "Fri Nov 20"
     static func shortDay(_ d: Date) -> String {
         d.formatted(.dateTime.weekday(.abbreviated).month(.abbreviated).day())
@@ -91,10 +97,8 @@ enum Fmt {
 }
 
 enum SettingsKeys {
+    /// The single medication of earlier versions; `MedicationSettings` replaces it.
     static let defaultMedicationName = "defaultMedicationName"
-    static let defaultMedicationDose = "defaultMedicationDose"
-    /// Minutes after midnight.
-    static let defaultMedicationMinutes = "defaultMedicationMinutes"
     static let defaultCaffeineMg = "defaultCaffeineMg"
     static let writeSleepToHealth = "writeSleepToHealth"
     static let preferredSource = "preferredSource"

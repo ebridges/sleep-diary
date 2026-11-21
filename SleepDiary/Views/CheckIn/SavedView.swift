@@ -31,7 +31,13 @@ struct SavedView: View {
 
                 Card(spacing: 4) {
                     CardLabel(text: "Your diary")
-                    row(d.medicationName.isEmpty ? "Medication" : d.medicationName, medicationText)
+                    if d.medications.isEmpty {
+                        row(d.medicationName.isEmpty ? "Medication" : d.medicationName, medicationText)
+                    } else {
+                        ForEach(d.medications) { m in
+                            row(m.name, m.took ? "\(m.dose.isEmpty ? "" : "\(m.dose) ")at \(Fmt.time(m.time))" : "Not taken")
+                        }
+                    }
                     row("In bed / asleep", "\(Fmt.time(d.bedTime)) / \(Fmt.time(d.sleepOnset))")
                     row("Wake-ups", wakeText)
                     row("Woke for good", Fmt.time(d.finalWake))

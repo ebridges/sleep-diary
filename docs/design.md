@@ -31,11 +31,10 @@ The app is a morning check-in for the previous night, plus quick symptom logging
 - Nap: No nap / Add a nap (start time and length).
 
 ### 4. Medication
-- Read the previous evening's medication dose event from Health (HealthKit Medications API, iOS 26: per-medication read authorization; verify API names in Xcode before relying on them).
-- Show name, dose, time taken, and minutes between the dose and Health's fell-asleep time.
-- Actions: "Yes, that's right" / "Change the time or dose" / "I didn't take it last night".
-- Empty state when Health has no dose: "No dose found for Thursday night", with "Add usual dose" and "Didn't take it". HealthKit has no public initializer for HKMedicationDoseEvent, so apps can't write doses; an added dose is kept in the app only.
-- Medications are shared per object: if none is shared, the screen offers "Choose medications to share", which opens Health's picker.
+- Medications are chosen in Settings › Apple Health (below the sleep source), from those the user has added in the Health app and shared with Sleep Diary (HealthKit Medications API, iOS 26, per-medication read authorization). More than one can be added; swipe to remove.
+- The step shows one card per medication: "Took it" / "Didn't take it", an Apple Health box with what Health recorded that evening and the medication's schedule, and, when taken, time and dose.
+- Time and dose are prefilled from the recorded dose, else from the usual dose and time. HealthKit has no schedule API, so the usual dose and time come from the medication's recent dose events (the latest scheduled dose, else the latest dose taken), else from the previous night in the diary.
+- HealthKit has no public initializer for HKMedicationDoseEvent, so apps can't write doses. What's confirmed here is kept in the app only.
 
 ### Saved
 - Recap of the diary for the night, what was written to Health, and what stays in the app. Link to set an afternoon reminder.

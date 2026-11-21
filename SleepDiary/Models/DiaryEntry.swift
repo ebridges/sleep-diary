@@ -65,6 +65,17 @@ enum FallAsleepFeel: String, Codable, CaseIterable, Identifiable {
     }
 }
 
+/// One medication on one evening: whether it was taken, when, and how much.
+struct MedicationRecord: Codable, Identifiable, Hashable {
+    var id = UUID()
+    var name: String
+    var took: Bool
+    var time: Date
+    var dose: String
+    /// The time matches the dose Health's Medications logged.
+    var fromHealth: Bool = false
+}
+
 /// A wake-up the user remembers that Health didn't record.
 struct AddedWake: Codable, Identifiable, Hashable {
     var id = UUID()
@@ -136,6 +147,9 @@ struct EntryDraft {
     var outOfBed: Date? = nil
     /// The dose was read from Health's Medications rather than entered in the app.
     var medicationFromHealth: Bool = false
+    /// One record per medication in Settings. The single medication fields above
+    /// summarize the taken ones, for the v1 editor and the export.
+    var medications: [MedicationRecord] = []
 
     // Derived numbers, all in minutes.
     var latencyMinutes: Double { max(0, sleepOnset.timeIntervalSince(bedTime) / 60) }
@@ -180,6 +194,9 @@ struct EntryDraft {
         }
         for i in addedWakes.indices {
             addedWakes[i].start = TimeResolver.resolve(addedWakes[i].start, night: night, anchor: .evening)
+        }
+        for i in medications.indices {
+            medications[i].time = TimeResolver.resolve(medications[i].time, night: night, anchor: .evening)
         }
         if let o = outOfBed {
             outOfBed = TimeResolver.resolve(o, night: night, anchor: .morning)
@@ -251,6 +268,7 @@ final class DiaryEntry {
     var yesterdayConfirmedAt: Date? = nil
     var morningConfirmedAt: Date? = nil
     var medicationFromHealth: Bool = false
+    var medicationsJSON: Data = Data()
     var updatedAt: Date = Date()
     var healthSyncedAt: Date? = nil
     var healthSyncError: String? = nil
@@ -286,6 +304,7 @@ final class DiaryEntry {
         addedWakesJSON = encodeList(d.addedWakes)
         outOfBed = d.outOfBed
         medicationFromHealth = d.medicationFromHealth
+        medicationsJSON = encodeList(d.medications)
         updatedAt = Date()
     }
 
@@ -315,7 +334,8 @@ final class DiaryEntry {
             rememberedWakes: decodeList(rememberedWakesJSON),
             addedWakes: decodeList(addedWakesJSON),
             outOfBed: outOfBed,
-            medicationFromHealth: medicationFromHealth
+            medicationFromHealth: medicationFromHealth,
+            medications: decodeList(medicationsJSON)
         )
     }
 }

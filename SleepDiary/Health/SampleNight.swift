@@ -5,7 +5,12 @@ import HealthKit
 /// The Simulator has no sleep data, so debug builds there show a made-up night
 /// from two sources: one with stages (like Apple Watch) and one without (like AutoSleep).
 enum SampleNight {
+    static let sourceNames = ["Apple Watch (sample)", "AutoSleep (sample)"]
+    static let medicationNames = ["Sample medication", "Second sample"]
+
+    /// The first sample medication has a dose logged; the others don't.
     static func dose(forNight night: Date, name: String) -> MedicationLookup {
+        guard name == medicationNames[0] else { return .noDose }
         let time = TimeResolver.at(hour: 21, minute: 30, night: night, anchor: .evening)
         return .found(MedicationDose(name: name.isEmpty ? "Sample medication" : name, amount: "1 tablet", time: time))
     }
@@ -56,8 +61,8 @@ enum SampleNight {
         plain.append(.init(start: at(21, 40), end: at(4, 20), value: inBed))
 
         return [
-            NightSleepSummary.summarizeOne(sourceID: "sample.watch", sourceName: "Apple Watch (sample)", samples: staged),
-            NightSleepSummary.summarizeOne(sourceID: "sample.autosleep", sourceName: "AutoSleep (sample)", samples: plain),
+            NightSleepSummary.summarizeOne(sourceID: "sample.watch", sourceName: sourceNames[0], samples: staged),
+            NightSleepSummary.summarizeOne(sourceID: "sample.autosleep", sourceName: sourceNames[1], samples: plain),
         ].compactMap { $0 }
     }
 }

@@ -57,7 +57,13 @@ final class CheckIn {
     /// Health said it hasn't been asked for access yet (the permission sheet never completed).
     var needsHealthAccess = false
 
-    var medication: MedicationLookup?
+    /// Per medication name: what Health logged that evening, and its usual dose and time.
+    var medicationLookups: [String: MedicationLookup] = [:]
+    var medicationRoutines: [String: MedicationRoutine] = [:]
+    /// The names the lookups above were made for.
+    var medicationsLookedUp: [String]?
+    /// The previous night's medication records, for each medication's last dose and time.
+    let previousMedications: [MedicationRecord]
     var healthCaffeineLoaded = false
 
     /// What the last save wrote to Health, for the Saved screen.
@@ -72,6 +78,7 @@ final class CheckIn {
         self.health = health
         let existing = entries.first { Calendar.current.isDate($0.night, inSameDayAs: night) }
         entry = existing
+        previousMedications = entries.first { $0.night < night }?.draft.medications ?? []
         if let existing {
             d = existing.draft
         } else {
@@ -159,16 +166,20 @@ final class CheckIn {
         if let wake = s.finalWake { d.finalWake = wake }
     }
 
-    func loadMedication(name: String) async {
-        let result = await health.eveningDose(forNight: night, matching: name)
-        // A newer lookup (the name changed in Settings) replaces this one.
-        if !Task.isCancelled { medication = result }
+    func loadMedications(_ names: [String]) async {
+        var lookups: [String: MedicationLookup] = [:]
+        var routines: [String: MedicationRoutine] = [:]
+        for name in names {
+            lookups[name] = await health.eveningDose(forNight: night, matching: name)
+            routines[name] = await health.medicationRoutine(matching: name)
+        }
+        // A newer lookup (the list changed in Settings) replaces this one.
+        guard !Task.isCancelled else { return }
+        medicationLookups = lookups
+        medicationRoutines = routines
+        medicationsLookedUp = names
     }
 
-    func requestMedicationAccess(name: String) async {
-        await health.requestMedicationAccess()
-        await loadMedication(name: name)
-    }
 
     /// Adds caffeine other apps logged for the day, once per check-in.
     func loadHealthCaffeine() async {

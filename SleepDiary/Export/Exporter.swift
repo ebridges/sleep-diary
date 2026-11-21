@@ -31,7 +31,13 @@ enum Exporter {
 
         var medication = "None"
         var medTime = ""
-        if d.tookMedication {
+        let taken = d.medications.filter(\.took)
+        if !taken.isEmpty {
+            medication = taken.map { "\($0.name) \($0.dose)".trimmingCharacters(in: .whitespaces) }
+                .joined(separator: "; ")
+            medTime = taken.map { Fmt.time($0.time) }.joined(separator: "; ")
+        } else if d.tookMedication && d.medications.isEmpty {
+            // Nights saved before medications were tracked one by one.
             medication = "\(d.medicationName) \(d.medicationDose)".trimmingCharacters(in: .whitespaces)
             medTime = Fmt.time(d.medicationTime)
         }

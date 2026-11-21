@@ -10,6 +10,16 @@ struct MedicationDose: Equatable {
     let time: Date
 }
 
+/// The usual dose and time of a medication, as Health's recent dose events show it.
+struct MedicationRoutine: Equatable {
+    /// e.g. "1 tablet"
+    let amount: String
+    /// Time of day, minutes after midnight.
+    let minutes: Int
+    /// True when it comes from Health's schedule; false when from the last dose logged.
+    let scheduled: Bool
+}
+
 enum MedicationLookup: Equatable {
     case found(MedicationDose)
     /// The medication is shared with the app but has no dose logged as taken that evening.
@@ -24,16 +34,6 @@ enum MedicationLookup: Equatable {
     case unsupported
     /// No medication is set in Settings, so there's nothing to look for.
     case notSet
-}
-
-extension MedicationLookup {
-    /// Sharing more medications in Health could change the result.
-    var offersSharing: Bool {
-        switch self {
-        case .notShared, .noMatch: return true
-        default: return false
-        }
-    }
 }
 
 /// What happened when the app asked for Health access.
@@ -300,6 +300,38 @@ final class HealthManager {
         return NightSleepSummary.summarize(others)
     }
 
+    // MARK: Choices for Settings
+
+    /// Names of the apps and devices (other than this app) that have recorded sleep, sorted.
+    func sleepSourceNames() async -> [String] {
+        var names: [String] = []
+        if isAvailable {
+            let descriptor = HKSourceQueryDescriptor(predicate: .categorySample(type: Self.sleepType))
+            let myBundle = Bundle.main.bundleIdentifier
+            if let sources = try? await descriptor.result(for: store) {
+                names = sources.filter { $0.bundleIdentifier != myBundle }.map(\.name)
+            }
+        }
+        #if DEBUG && targetEnvironment(simulator)
+        if names.isEmpty { names = SampleNight.sourceNames }
+        #endif
+        return Array(Set(names)).sorted()
+    }
+
+    /// Names (nickname, else Health's name) of the medications shared with this app, sorted.
+    /// Empty before iOS 26 or when none are shared.
+    func sharedMedicationNames() async -> [String] {
+        var names: [String] = []
+        if isAvailable, #available(iOS 26.0, *),
+           let meds = try? await HKUserAnnotatedMedicationQueryDescriptor().result(for: store) {
+            names = meds.filter { !$0.isArchived }.map { $0.nickname ?? $0.medication.displayText }
+        }
+        #if DEBUG && targetEnvironment(simulator)
+        if names.isEmpty { names = SampleNight.medicationNames }
+        #endif
+        return Array(Set(names)).sorted()
+    }
+
     // MARK: Reading caffeine
 
     /// Caffeine other apps logged between `start` and `end`.
@@ -386,6 +418,50 @@ final class HealthManager {
             if want.contains(where: { $0.count >= 5 && have.contains($0) }) { return true }
         }
         return false
+    }
+
+    /// The usual dose and time for a medication, from its dose events in the last 30 days:
+    /// the latest scheduled dose if it has a schedule, else the latest dose logged as taken.
+    /// HealthKit doesn't expose medication schedules directly.
+    func medicationRoutine(matching name: String) async -> MedicationRoutine? {
+        guard !name.trimmingCharacters(in: .whitespaces).isEmpty else { return nil }
+        #if DEBUG && targetEnvironment(simulator)
+        return MedicationRoutine(amount: "1 tablet", minutes: 22 * 60, scheduled: true)
+        #else
+        guard isAvailable, #available(iOS 26.0, *) else { return nil }
+        return try? await readRoutine(matching: name)
+        #endif
+    }
+
+    @available(iOS 26.0, *)
+    private func readRoutine(matching name: String) async throws -> MedicationRoutine? {
+        let meds = try await HKUserAnnotatedMedicationQueryDescriptor().result(for: store)
+        guard let med = meds.first(where: { Self.matches($0, name: name) }) else { return nil }
+        let since = Calendar.current.date(byAdding: .day, value: -30, to: Date()) ?? .distantPast
+        let predicate = NSCompoundPredicate(andPredicateWithSubpredicates: [
+            HKQuery.predicateForSamples(withStart: since, end: nil, options: []),
+            HKQuery.predicateForMedicationDoseEvent(medicationConceptIdentifier: med.medication.identifier),
+        ])
+        let descriptor = HKSampleQueryDescriptor(
+            predicates: [.sample(type: HKObjectType.medicationDoseEventType(), predicate: predicate)],
+            sortDescriptors: [SortDescriptor(\.startDate, order: .reverse)],
+            limit: 60
+        )
+        let events = try await descriptor.result(for: store).compactMap { $0 as? HKMedicationDoseEvent }
+        let form = med.medication.generalForm
+        func minutesOfDay(_ date: Date) -> Int {
+            let c = Calendar.current.dateComponents([.hour, .minute], from: date)
+            return (c.hour ?? 0) * 60 + (c.minute ?? 0)
+        }
+        if let event = events.first(where: { $0.scheduledDate != nil }), let date = event.scheduledDate {
+            return MedicationRoutine(amount: Self.amountText(event.scheduledDoseQuantity ?? event.doseQuantity, form: form),
+                                     minutes: minutesOfDay(date), scheduled: true)
+        }
+        if let event = events.first(where: { $0.logStatus == .taken }) {
+            return MedicationRoutine(amount: Self.amountText(event.doseQuantity, form: form),
+                                     minutes: minutesOfDay(event.startDate), scheduled: false)
+        }
+        return nil
     }
 
     @available(iOS 26.0, *)

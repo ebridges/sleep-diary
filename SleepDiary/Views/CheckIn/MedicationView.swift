@@ -1,232 +1,153 @@
 import SwiftUI
 
-/// Check-in step 4: confirm the evening dose Health's Medications recorded.
+/// Check-in step 4: for each medication chosen in Settings, did you take it last night?
 ///
-/// HealthKit lets apps read dose events but not create them, so a dose added
-/// here is kept in the diary only.
+/// Each card shows what Health's Medications recorded that evening and the
+/// medication's schedule. Time and dose are prefilled from the recorded dose,
+/// else the usual dose and time (Health's recent doses, then the last night in
+/// the diary). HealthKit lets apps read dose events but not create them, so what's
+/// confirmed here stays in the diary.
 struct MedicationView: View {
     @Bindable var checkIn: CheckIn
     let onDone: () -> Void
 
-    @AppStorage(SettingsKeys.defaultMedicationName) private var medicationName = ""
-    @AppStorage(SettingsKeys.defaultMedicationDose) private var usualDose = ""
-    @AppStorage(SettingsKeys.defaultMedicationMinutes) private var usualMinutes = 22 * 60 + 30
+    @AppStorage(MedicationSettings.key) private var rawMedications = ""
     @AppStorage(SettingsKeys.writeSleepToHealth) private var writeNaps = false
 
-    private enum Choice { case confirmHealth, editHealth, addManually, didNotTake }
-    @State private var choice: Choice?
-    @State private var time = Date()
-    @State private var amount = ""
+    private struct Answer {
+        /// nil until answered.
+        var took: Bool?
+        var time: Date
+        var dose: String
+    }
+
+    @State private var answers: [String: Answer] = [:]
     @State private var saving = false
     @State private var showingSettings = false
-    /// The medication name the current lookup was made for.
-    @State private var lookedUpName: String?
+
+    private var names: [String] { MedicationSettings.names(rawMedications) }
+
+    private var allAnswered: Bool {
+        names.allSatisfy { answers[$0]?.took != nil }
+    }
 
     var body: some View {
         StepScaffold(step: .medication, title: "Medication", subtitle: "\(Fmt.weekday(checkIn.night)) evening") {
-            switch checkIn.medication {
-            case nil:
-                Card { ProgressView().frame(maxWidth: .infinity, minHeight: 120) }
-            case .found(let dose)?:
-                foundCard(dose)
-                foundActions(dose)
-            case .notSet?:
+            if names.isEmpty {
                 notSetCard
-            case let lookup?:
-                missingCard(lookup)
-            }
-        }
-        // Re-runs (cancelling the previous lookup) whenever the name in Settings changes.
-        .task(id: medicationName) {
-            if lookedUpName == nil && checkIn.medication != nil {
-                lookedUpName = medicationName   // already loaded earlier in this check-in
-                return
-            }
-            guard lookedUpName != medicationName || checkIn.medication == nil else { return }
-            choice = nil
-            checkIn.medication = nil
-            await checkIn.loadMedication(name: medicationName)
-            if !Task.isCancelled { lookedUpName = medicationName }
-        }
-        .onChange(of: checkIn.medication) { setUp() }
-        .sheet(isPresented: $showingSettings) { SettingsView() }
-        .onAppear { setUp() }
-    }
-
-    // MARK: Found in Health
-
-    private func foundCard(_ dose: MedicationDose) -> some View {
-        Card(spacing: 14) {
-            Label("From Apple Health · Medications", systemImage: "heart")
-                .font(.system(size: 13))
-                .foregroundStyle(Theme.secondary)
-            HStack(spacing: 14) {
-                Image(systemName: "pills")
-                    .font(.system(size: 24))
-                    .foregroundStyle(Theme.rem)
-                    .frame(width: 52, height: 52)
-                    .background(Theme.cardRaised, in: RoundedRectangle(cornerRadius: 16))
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(dose.name).font(.system(size: 24, weight: .semibold))
-                    Text("\(choice == .editHealth ? amount : dose.amount) · logged as taken")
-                        .foregroundStyle(Theme.secondary)
-                }
-            }
-            Divider().overlay(Theme.line)
-            if choice == .editHealth {
-                editors
             } else {
-                HStack {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("Taken at").font(.system(size: 15, weight: .medium))
-                        Text(Fmt.shortDay(dose.time)).font(.system(size: 13)).foregroundStyle(Theme.secondary)
-                    }
-                    Spacer()
-                    Text(Fmt.time(dose.time))
-                        .font(.system(size: 16, weight: .semibold))
-                        .monospacedDigit()
-                        .padding(.horizontal, 14)
-                        .frame(minHeight: 40)
-                        .background(Theme.cardRaised, in: RoundedRectangle(cornerRadius: 10))
+                ForEach(names, id: \.self) { name in medicationCard(name) }
+                Button("Next", action: save)
+                    .buttonStyle(WideButtonStyle())
+                    .disabled(!allAnswered || saving)
+                    .opacity(allAnswered ? 1 : 0.5)
+            }
+        }
+        // Re-runs (cancelling the previous lookup) whenever the list in Settings changes.
+        .task(id: rawMedications) {
+            let names = names
+            if checkIn.medicationsLookedUp != names {
+                await checkIn.loadMedications(names)
+                guard !Task.isCancelled else { return }
+            }
+            for name in names where answers[name] == nil {
+                answers[name] = prefill(name)
+            }
+        }
+        .sheet(isPresented: $showingSettings) { SettingsView() }
+    }
+
+    // MARK: Cards
+
+    private func medicationCard(_ name: String) -> some View {
+        let took = answers[name]?.took
+        return Card {
+            Text(name).font(Theme.cardTitleFont)
+            FlowRow {
+                Chip(title: "Took it", selected: took == true) { answers[name]?.took = true }
+                Chip(title: "Didn't take it", selected: took == false) { answers[name]?.took = false }
+            }
+            healthBlock(name)
+            if took == true {
+                Divider().overlay(Theme.line)
+                editors(name)
+                if let time = answers[name]?.time, let line = doseToSleepText(time) {
+                    Text(line).font(.system(size: 14)).foregroundStyle(Theme.secondary)
                 }
             }
-            if let line = doseToSleepText(choice == .editHealth ? time : dose.time) {
-                Text(line).font(.system(size: 14)).foregroundStyle(Theme.secondary)
-            }
         }
     }
-
-    @ViewBuilder
-    private func foundActions(_ dose: MedicationDose) -> some View {
-        if choice == .editHealth {
-            Button("Save changes") { save(took: true, fromHealth: false) }
-                .buttonStyle(WideButtonStyle())
-            Button("Cancel changes") { choice = .confirmHealth; time = dose.time; amount = dose.amount }
-                .buttonStyle(WideButtonStyle(primary: false))
-        } else {
-            Text("Is this right?").font(Theme.cardTitleFont)
-            Button("Yes, that's right") {
-                time = dose.time
-                amount = dose.amount
-                save(took: true, fromHealth: true)
-            }
-            .buttonStyle(WideButtonStyle())
-            Button("Change the time or dose") { choice = .editHealth }
-                .buttonStyle(WideButtonStyle(primary: false))
-            Button("I didn't take it last night") { save(took: false, fromHealth: false) }
-                .buttonStyle(WideButtonStyle(primary: false))
-        }
-    }
-
-    // MARK: No medication set
 
     private var notSetCard: some View {
         VStack(alignment: .leading, spacing: 18) {
             Card {
-                Text("No medication set").font(.system(size: 15, weight: .semibold))
-                Text("Add the medication you take in the evening in Settings, and the check-in will look for that dose in Apple Health's Medications.")
+                Text("No medications added").font(.system(size: 15, weight: .semibold))
+                Text("Add the medications you take in the evening in Settings › Apple Health. If you don't take any, skip this step.")
                     .font(.system(size: 14))
                     .foregroundStyle(Theme.secondary)
             }
             Button("Open Settings") { showingSettings = true }
                 .buttonStyle(WideButtonStyle(primary: false))
-            Button("Skip") { save(took: false, fromHealth: false) }
+            Button("Skip", action: save)
                 .buttonStyle(WideButtonStyle())
                 .disabled(saving)
         }
     }
 
-    // MARK: Not in Health
-
-    private func missingCard(_ lookup: MedicationLookup) -> some View {
-        VStack(alignment: .leading, spacing: 18) {
-            Card {
-                Text("No \(medicationName) dose found for \(Fmt.weekday(checkIn.night)) night")
-                    .font(.system(size: 15, weight: .semibold))
-                Text(missingExplanation(lookup))
-                    .font(.system(size: 14))
+    /// What Apple Health recorded for that evening, and the medication's schedule.
+    @ViewBuilder
+    private func healthBlock(_ name: String) -> some View {
+        if let recorded = recordedLine(name) {
+            VStack(alignment: .leading, spacing: 6) {
+                Label("Apple Health", systemImage: "heart")
+                    .font(.system(size: 13, weight: .semibold))
                     .foregroundStyle(Theme.secondary)
-                if case .noMatch(let names) = lookup {
-                    ForEach(names, id: \.self) { name in
-                        Button {
-                            medicationName = name   // re-runs the lookup
-                        } label: {
-                            HStack {
-                                Text(name).multilineTextAlignment(.leading)
-                                Spacer()
-                                Text("Use this").foregroundStyle(Theme.accent)
-                            }
-                            .font(.system(size: 15, weight: .medium))
-                            .padding(.horizontal, 14)
-                            .frame(minHeight: 44)
-                            .background(Theme.cardRaised, in: RoundedRectangle(cornerRadius: 12))
-                        }
-                        .buttonStyle(.plain)
-                    }
-                }
-                FlowRow {
-                    Chip(title: "Add usual dose", selected: choice == .addManually) { choice = .addManually }
-                    Chip(title: "Didn't take it", selected: choice == .didNotTake) { choice = .didNotTake }
-                }
-                if choice == .addManually {
-                    editors
-                    Text("Kept in Sleep Diary. Apps can read doses from Health's Medications but can't add them.")
-                        .font(.system(size: 13))
-                        .foregroundStyle(Theme.secondary)
+                healthRow("Recorded", recorded)
+                if let routine = checkIn.medicationRoutines[name] {
+                    healthRow(routine.scheduled ? "Scheduled" : "Usually",
+                              "\(routine.amount) at \(Fmt.minutes(routine.minutes))")
                 }
             }
-            if lookup.offersSharing {
-                Button("Choose medications to share") {
-                    Task { await checkIn.requestMedicationAccess(name: medicationName) }
-                }
-                .buttonStyle(WideButtonStyle(primary: false))
-            }
-            Button("Next") {
-                save(took: choice == .addManually, fromHealth: false)
-            }
-            .buttonStyle(WideButtonStyle())
-            .disabled(choice == nil || saving)
-            .opacity(choice == nil ? 0.5 : 1)
+            .padding(12)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(Theme.cardRaised, in: RoundedRectangle(cornerRadius: 12))
         }
     }
 
-    private func missingExplanation(_ lookup: MedicationLookup) -> String {
-        let usual = usualAmount.isEmpty
-            ? "Your usual time is around \(Fmt.time(usualTime))."
-            : "Your usual is \(usualAmount) around \(Fmt.time(usualTime))."
-        switch lookup {
-        case .unsupported:
-            return "Reading Health's Medications needs iOS 26. \(usual)"
-        case .notShared:
-            return "Sleep Diary can only see medications you choose to share with it. Tap Choose medications to share and turn on \(medicationName). \(usual)"
-        case .noMatch:
-            return "Health is sharing these medications, but none matches \"\(medicationName)\" from Settings. Tap the one you mean:"
-        case .failed(let message):
-            return "Couldn't read Health's Medications: \(message). \(usual)"
-        default:
-            return "Nothing was logged as taken that evening. \(usual)"
+    private func healthRow(_ label: String, _ value: String) -> some View {
+        HStack(alignment: .firstTextBaseline) {
+            Text(label).foregroundStyle(Theme.secondary)
+            Spacer()
+            Text(value).fontWeight(.medium).multilineTextAlignment(.trailing)
+        }
+        .font(.system(size: 14))
+    }
+
+    /// What Health's Medications logged for this medication that evening.
+    private func recordedLine(_ name: String) -> String? {
+        guard checkIn.medicationsLookedUp != nil else { return "Checking…" }
+        switch checkIn.medicationLookups[name] {
+        case .found(let dose)?:
+            return "\(dose.amount) taken at \(Fmt.time(dose.time))"
+        case .noDose?:
+            return "Nothing logged that evening"
+        case .notShared?, .noMatch?:
+            return "Not shared with Sleep Diary (Settings › Apple Health)"
+        case .failed(let message)?:
+            return "Couldn't read: \(message)"
+        case .unsupported?, .notSet?, nil:
+            return nil
         }
     }
 
-    /// The usual dose from Settings, else the last one recorded.
-    private var usualAmount: String {
-        usualDose.isEmpty ? checkIn.d.medicationDose : usualDose
-    }
-
-    private var usualTime: Date {
-        TimeResolver.at(hour: usualMinutes / 60, minute: usualMinutes % 60, night: checkIn.night, anchor: .evening)
-    }
-
-    // MARK: Shared
-
-    private var editors: some View {
+    private func editors(_ name: String) -> some View {
         VStack(spacing: 12) {
             HStack {
                 Text("Taken at").font(.system(size: 15, weight: .medium))
                 Spacer()
                 DatePicker("Taken at", selection: Binding(
-                    get: { time },
-                    set: { time = TimeResolver.resolve($0, night: checkIn.night, anchor: .evening) }
+                    get: { answers[name]?.time ?? Date() },
+                    set: { answers[name]?.time = TimeResolver.resolve($0, night: checkIn.night, anchor: .evening) }
                 ), displayedComponents: .hourAndMinute)
                 .labelsHidden()
             }
@@ -234,11 +155,14 @@ struct MedicationView: View {
             HStack {
                 Text("Dose").font(.system(size: 15, weight: .medium))
                 Spacer()
-                TextField("e.g. 1 tablet", text: $amount)
-                    .multilineTextAlignment(.trailing)
-                    .padding(.horizontal, 12)
-                    .frame(maxWidth: 180, minHeight: 40)
-                    .background(Theme.cardRaised, in: RoundedRectangle(cornerRadius: 10))
+                TextField("e.g. 1 tablet", text: Binding(
+                    get: { answers[name]?.dose ?? "" },
+                    set: { answers[name]?.dose = $0 }
+                ))
+                .multilineTextAlignment(.trailing)
+                .padding(.horizontal, 12)
+                .frame(maxWidth: 180, minHeight: 40)
+                .background(Theme.cardRaised, in: RoundedRectangle(cornerRadius: 10))
             }
             .frame(minHeight: 44)
         }
@@ -253,32 +177,55 @@ struct MedicationView: View {
         return "Health shows you asleep at \(Fmt.time(onset)), \(Fmt.hm(Double(-minutes))) before this dose."
     }
 
-    private func setUp() {
-        guard choice == nil, let lookup = checkIn.medication else { return }
-        switch lookup {
-        case .found(let dose):
-            time = dose.time
-            amount = dose.amount
-            choice = .confirmHealth
-        default:
-            let done = checkIn.isDone(.medication) && checkIn.d.tookMedication
-            time = done ? checkIn.d.medicationTime : usualTime
-            amount = done ? checkIn.d.medicationDose : usualAmount
-            if checkIn.isDone(.medication) {
-                choice = checkIn.d.tookMedication ? .addManually : .didNotTake
-            }
-        }
+    // MARK: Prefill and save
+
+    private func healthDose(_ name: String) -> MedicationDose? {
+        if case .found(let dose)? = checkIn.medicationLookups[name] { return dose }
+        return nil
     }
 
-    private func save(took: Bool, fromHealth: Bool) {
-        checkIn.d.tookMedication = took
-        if took {
-            if case .found(let dose)? = checkIn.medication { checkIn.d.medicationName = dose.name }
-            if checkIn.d.medicationName.isEmpty { checkIn.d.medicationName = medicationName }
-            checkIn.d.medicationTime = time
-            checkIn.d.medicationDose = amount
+    /// The starting answer for one medication: what was saved for this night,
+    /// else the dose Health logged, else the usual dose and time.
+    private func prefill(_ name: String) -> Answer {
+        if checkIn.isDone(.medication), let saved = checkIn.d.medications.first(where: { $0.name == name }) {
+            return Answer(took: saved.took, time: saved.time, dose: saved.dose)
         }
-        checkIn.d.medicationFromHealth = took && fromHealth
+        if let dose = healthDose(name) {
+            return Answer(took: true, time: dose.time, dose: dose.amount)
+        }
+        let previous = checkIn.previousMedications.first { $0.name == name && $0.took }
+        let routine = checkIn.medicationRoutines[name]
+        let time: Date
+        if let routine {
+            time = TimeResolver.at(hour: routine.minutes / 60, minute: routine.minutes % 60,
+                                   night: checkIn.night, anchor: .evening)
+        } else if let previous {
+            time = TimeResolver.resolve(previous.time, night: checkIn.night, anchor: .evening)
+        } else {
+            time = TimeResolver.at(hour: 22, minute: 0, night: checkIn.night, anchor: .evening)
+        }
+        return Answer(took: nil, time: time, dose: routine?.amount ?? previous?.dose ?? "")
+    }
+
+    private func save() {
+        let records = names.compactMap { name -> MedicationRecord? in
+            guard let a = answers[name] else { return nil }
+            let took = a.took == true
+            let fromHealth = took && healthDose(name).map { abs($0.time.timeIntervalSince(a.time)) < 60 } == true
+            return MedicationRecord(name: name, took: took, time: a.time, dose: a.dose, fromHealth: fromHealth)
+        }
+        checkIn.d.medications = records
+
+        // The single medication fields summarize what was taken.
+        let taken = records.filter(\.took)
+        checkIn.d.tookMedication = !taken.isEmpty
+        if !taken.isEmpty {
+            checkIn.d.medicationName = taken.map(\.name).joined(separator: ", ")
+            checkIn.d.medicationDose = taken.map(\.dose).filter { !$0.isEmpty }.joined(separator: ", ")
+            checkIn.d.medicationTime = taken.map(\.time).min() ?? checkIn.d.medicationTime
+        }
+        checkIn.d.medicationFromHealth = !taken.isEmpty && taken.allSatisfy(\.fromHealth)
+
         saving = true
         Task {
             await checkIn.confirm(.medication, writeNaps: writeNaps)
