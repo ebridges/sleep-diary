@@ -7,7 +7,7 @@ struct SleepDiaryApp: App {
 
     var body: some Scene {
         WindowGroup {
-            EntryListView()
+            HomeView()
                 .environment(health)
         }
         .modelContainer(for: DiaryEntry.self)

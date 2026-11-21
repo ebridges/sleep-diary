@@ -7,21 +7,25 @@ Personal iPhone app (SwiftUI, SwiftData, HealthKit, iOS 17+ target) for a nightl
 - `SleepDiary/`: app sources. `Models/` (SwiftData model + editable draft), `Health/` (all HealthKit reads/writes), `Views/`, `Export/` (CSV + PDF for the doctor), `Support/` (time handling, formatting, reminders).
 - `SleepDiary.entitlements`: HealthKit entitlement.
 - `docs/design.md`: the agreed UI and Health mapping. The mockups linked there are the source of truth for the UI.
-- `scripts/make_icon.py`: generates the app icon PNG into the asset catalog (needs Pillow). Not generated yet.
+- `scripts/make_icon.py`: generates the app icon PNG into the asset catalog (needs Pillow). Already run; `icon-1024.png` is in the asset catalog.
 
 ## Current state
-- The code is the first version: a single editor form, written before the design work. It has never been compiled; expect a first round of build fixes. The Xcode project file was hand-written and also never opened.
+- The project builds cleanly (Xcode 27). The v1 single editor form (`EntryEditorView`) still exists alongside the redesign.
+- Done from the redesign: Home (`Views/HomeView.swift`) and the morning check-in (`Views/CheckIn/`): Medication, Last night, Yesterday, This morning, Saved. `CheckIn` holds one night's draft and Health data; each step's confirm saves the entry, stamps that step's `…ConfirmedAt`, and re-syncs Health. `EntryListView` ("All nights") and the v1 editor are reached from Home.
+- Not done yet: daytime symptom logging (and Home's "During the day" card), the afternoon reminder link on Saved, and the export changes for the new fields.
+- Medications: read-only. `HKMedicationDoseEvent` can't be created by apps, so a dose added in the app stays in the app. Medication read access is per object (`requestPerObjectReadAuthorization`), offered only from the Medication screen because it prompts every time. Not yet tried on a device.
 - `docs/design.md` describes the redesign to implement next: a step-by-step morning check-in (medication from Health, hypnogram with confirm/correct, intake, morning ratings), plus daytime symptom logging.
 - Notable changes from v1 to apply:
   - Symptoms (grogginess, daytime sleepiness, dizziness, etc.) use Health's four categories (Not present / Mild / Moderate / Severe), not 1 to 5. Morning grogginess is written to Health as Fatigue.
   - Rested stays 1 to 5, 5 = best, app only.
   - Daytime symptoms are separate timestamped entries, not fields on the night's entry.
-  - Medication is read from Health (iOS 26 Medications API) and confirmed, not typed.
+  - Medication is read from Health (iOS 26 Medications API) and confirmed, not typed. Apps can't write doses.
   - Night corrections are kept in the app, never written to Health. Only naps are written as sleep.
 
 ## Build and run
 - Build: `xcodebuild -project "Sleep Diary.xcodeproj" -scheme SleepDiary -destination 'generic/platform=iOS Simulator' build`
-- HealthKit has no sleep data in the Simulator; test Health reads on the device.
+- HealthKit has no sleep data in the Simulator. Debug Simulator builds show a made-up night from two sources (`Health/SampleNight.swift`) when Health returns nothing; test real reads on the device.
+- The Health permission sheet can come up blank in the Simulator. Launch with `-SkipHealthAuth` (debug only) to skip the request: `xcrun simctl launch <udid> com.ebridges.sleepdiary -SkipHealthAuth`.
 - Signing: automatic; the user picks their team in Xcode. Bundle ID `com.ebridges.sleepdiary`.
 
 ## Conventions

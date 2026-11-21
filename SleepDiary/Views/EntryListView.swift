@@ -8,11 +8,10 @@ struct EntryListView: View {
     @AppStorage(SettingsKeys.defaultMedicationName) private var defaultMedicationName = ""
 
     @State private var showingNew = false
-    @State private var showingSettings = false
     @State private var showingExport = false
 
+    /// All nights, newest first. Pushed from Home.
     var body: some View {
-        NavigationStack {
             List {
                 ForEach(entries) { entry in
                     NavigationLink {
@@ -28,15 +27,12 @@ struct EntryListView: View {
                     ContentUnavailableView(
                         "No nights logged yet",
                         systemImage: "moon.zzz",
-                        description: Text("Tap + each morning to log last night.")
+                        description: Text("Finish a morning check-in and it appears here.")
                     )
                 }
             }
-            .navigationTitle("Sleep Diary")
+            .navigationTitle("All nights")
             .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
-                    Button { showingSettings = true } label: { Image(systemName: "gearshape") }
-                }
                 ToolbarItem(placement: .topBarTrailing) {
                     Button { showingExport = true } label: { Image(systemName: "square.and.arrow.up") }
                         .disabled(entries.isEmpty)
@@ -54,10 +50,7 @@ struct EntryListView: View {
                     )
                 }
             }
-            .sheet(isPresented: $showingSettings) { SettingsView() }
             .sheet(isPresented: $showingExport) { ExportView(entries: entries) }
-            .task { await health.requestAuthorization() }
-        }
     }
 
     private func delete(_ offsets: IndexSet) {

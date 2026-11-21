@@ -1,6 +1,17 @@
 import Foundation
 import HealthKit
 
+enum SleepStage: Hashable {
+    case awake, rem, core, deep, unspecified
+}
+
+/// A stretch of one stage, or an awake gap between sleep segments.
+struct SleepSegment: Hashable {
+    let start: Date
+    let end: Date
+    let stage: SleepStage
+}
+
 /// One source's view of one night (e.g. "AutoSleep" or "Apple Watch").
 struct NightSleepSummary: Identifiable, Hashable {
     let sourceID: String
@@ -15,8 +26,26 @@ struct NightSleepSummary: Identifiable, Hashable {
     let coreMinutes: Double
     let deepMinutes: Double
     let remMinutes: Double
+    /// Asleep segments by stage plus every awake gap between them, in time order.
+    let segments: [SleepSegment]
+    /// Gaps of at least `minimumWakeGap` between asleep segments.
+    let wakes: [DateInterval]
+    /// Gaps shorter than `minimumWakeGap`.
+    let briefStirrings: Int
 
     var id: String { sourceID }
+
+    /// From getting into bed (or falling asleep, if earlier or unknown) to the final wake.
+    var inBedSpanStart: Date? {
+        guard let onset = sleepOnset else { return inBedStart }
+        guard let bed = inBedStart else { return onset }
+        return min(bed, onset)
+    }
+
+    var inBedSpanMinutes: Double? {
+        guard let a = inBedSpanStart, let b = finalWake, b > a else { return nil }
+        return b.timeIntervalSince(a) / 60
+    }
 
     var latencyMinutes: Double? {
         guard let a = inBedStart, let b = sleepOnset, b >= a else { return nil }
@@ -33,7 +62,13 @@ struct NightSleepSummary: Identifiable, Hashable {
     static func summarize(_ samples: [HKCategorySample]) -> [NightSleepSummary] {
         let groups = Dictionary(grouping: samples) { $0.sourceRevision.source.bundleIdentifier }
         return groups
-            .compactMap { summarizeOne(sourceID: $0.key, samples: $0.value) }
+            .compactMap { group in
+                summarizeOne(
+                    sourceID: group.key,
+                    sourceName: group.value.first?.sourceRevision.source.name ?? group.key,
+                    samples: group.value.map { RawSample(start: $0.startDate, end: $0.endDate, value: $0.value) }
+                )
+            }
             .sorted { $0.asleepMinutes > $1.asleepMinutes }
     }
 
@@ -48,7 +83,14 @@ struct NightSleepSummary: Identifiable, Hashable {
         return summaries.first
     }
 
-    private static func summarizeOne(sourceID: String, samples: [HKCategorySample]) -> NightSleepSummary? {
+    /// A sleep analysis sample reduced to what the summary needs.
+    struct RawSample {
+        let start: Date
+        let end: Date
+        let value: Int
+    }
+
+    static func summarizeOne(sourceID: String, sourceName: String, samples: [RawSample]) -> NightSleepSummary? {
         let core = HKCategoryValueSleepAnalysis.asleepCore.rawValue
         let deep = HKCategoryValueSleepAnalysis.asleepDeep.rawValue
         let rem = HKCategoryValueSleepAnalysis.asleepREM.rawValue
@@ -60,7 +102,7 @@ struct NightSleepSummary: Identifiable, Hashable {
         guard !asleep.isEmpty else { return nil }
 
         // Merge overlapping or touching segments.
-        let sorted = asleep.map { Interval(start: $0.startDate, end: $0.endDate) }
+        let sorted = asleep.map { Interval(start: $0.start, end: $0.end) }
             .sorted { $0.start < $1.start }
         var merged: [Interval] = []
         for iv in sorted {
@@ -72,37 +114,57 @@ struct NightSleepSummary: Identifiable, Hashable {
         }
 
         let asleepSeconds = merged.reduce(0.0) { $0 + $1.end.timeIntervalSince($1.start) }
-        var wakes = 0
-        var awakeSeconds: TimeInterval = 0
+        var wakes: [DateInterval] = []
+        var stirrings = 0
+        var gaps: [SleepSegment] = []
         if merged.count > 1 {
             for i in 1..<merged.count {
-                let gap = merged[i].start.timeIntervalSince(merged[i - 1].end)
+                let start = merged[i - 1].end
+                let end = merged[i].start
+                let gap = end.timeIntervalSince(start)
+                gaps.append(SleepSegment(start: start, end: end, stage: .awake))
                 if gap >= minimumWakeGap {
-                    wakes += 1
-                    awakeSeconds += gap
+                    wakes.append(DateInterval(start: start, end: end))
+                } else {
+                    stirrings += 1
                 }
             }
         }
+        let awakeSeconds = wakes.reduce(0.0) { $0 + $1.duration }
+
+        func stage(_ value: Int) -> SleepStage {
+            switch value {
+            case rem: return .rem
+            case core: return .core
+            case deep: return .deep
+            default: return .unspecified
+            }
+        }
+        let stageSegments = asleep.map { SleepSegment(start: $0.start, end: $0.end, stage: stage($0.value)) }
+        let segments = (stageSegments + gaps).sorted { $0.start < $1.start }
 
         func minutes(_ value: Int) -> Double {
             samples.filter { $0.value == value }
-                .reduce(0.0) { $0 + $1.endDate.timeIntervalSince($1.startDate) } / 60
+                .reduce(0.0) { $0 + $1.end.timeIntervalSince($1.start) } / 60
         }
 
         let bed = samples.filter { $0.value == inBed }
         return NightSleepSummary(
             sourceID: sourceID,
-            sourceName: samples.first?.sourceRevision.source.name ?? sourceID,
-            inBedStart: bed.map(\.startDate).min(),
-            inBedEnd: bed.map(\.endDate).max(),
+            sourceName: sourceName,
+            inBedStart: bed.map(\.start).min(),
+            inBedEnd: bed.map(\.end).max(),
             sleepOnset: merged.first?.start,
             finalWake: merged.last?.end,
             asleepMinutes: asleepSeconds / 60,
-            awakenings: wakes,
+            awakenings: wakes.count,
             awakeMinutes: awakeSeconds / 60,
             coreMinutes: minutes(core),
             deepMinutes: minutes(deep),
-            remMinutes: minutes(rem)
+            remMinutes: minutes(rem),
+            segments: segments,
+            wakes: wakes,
+            briefStirrings: stirrings
         )
     }
 }

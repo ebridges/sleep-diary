@@ -243,7 +243,8 @@ struct EntryEditorView: View {
         let ctx = self.context
         Task { @MainActor in
             do {
-                try await manager.sync(draft, entryID: id, writeSleep: shouldWriteSleep)
+                try await manager.sync(draft, entryID: id, writeNaps: shouldWriteSleep,
+                                       writeGrogginess: target.morningConfirmedAt != nil || draft.grogginess != .notPresent)
                 target.healthSyncedAt = Date()
                 target.healthSyncError = nil
             } catch {

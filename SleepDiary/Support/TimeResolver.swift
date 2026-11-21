@@ -59,6 +59,22 @@ enum Fmt {
         d.formatted(.dateTime.weekday(.abbreviated).month(.abbreviated).day())
     }
 
+    /// "Fri Nov 20"
+    static func shortDay(_ d: Date) -> String {
+        d.formatted(.dateTime.weekday(.abbreviated).month(.abbreviated).day())
+            .replacingOccurrences(of: ",", with: "")
+    }
+
+    /// "Thursday"
+    static func weekday(_ d: Date) -> String {
+        d.formatted(.dateTime.weekday(.wide))
+    }
+
+    /// "Friday, Nov 20"
+    static func longDay(_ d: Date) -> String {
+        d.formatted(.dateTime.weekday(.wide).month(.abbreviated).day())
+    }
+
     static func number(_ x: Double) -> String {
         x == x.rounded() ? String(Int(x)) : String(format: "%.1f", x)
     }

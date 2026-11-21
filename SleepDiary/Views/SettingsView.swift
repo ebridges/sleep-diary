@@ -30,14 +30,14 @@ struct SettingsView: View {
                 }
 
                 Section {
-                    Toggle("Also write bed and nap times", isOn: $writeSleep)
+                    Toggle("Write naps to Health", isOn: $writeSleep)
                     Button("Ask for Health access again") {
                         Task { await health.requestAuthorization() }
                     }
                 } header: {
                     Text("Apple Health")
                 } footer: {
-                    Text("Caffeine, alcohol, grogginess or daytime sleepiness (as Fatigue) and dizziness are always saved to Health. Bed and nap times are off by default so your estimates don't mix with Apple Watch or AutoSleep sleep totals. To change permissions: Settings › Health › Data Access & Devices › Sleep Diary.")
+                    Text("Caffeine, alcohol, grogginess or daytime sleepiness (as Fatigue) and dizziness are always saved to Health. Naps are off by default. Your corrections to the night are kept in the app and never written to Health, so Apple Watch or AutoSleep stays the record. To change permissions: Settings › Health › Data Access & Devices › Sleep Diary.")
                 }
 
                 Section("Morning reminder") {

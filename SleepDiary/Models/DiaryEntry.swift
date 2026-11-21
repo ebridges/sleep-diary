@@ -8,12 +8,17 @@ struct CaffeineItem: Codable, Identifiable, Hashable {
     var time: Date
     var label: String
     var mg: Double
+    /// Read from another app's Health sample; never written back.
+    var fromHealth: Bool? = nil
+    var isFromHealth: Bool { fromHealth == true }
 }
 
 struct AlcoholItem: Codable, Identifiable, Hashable {
     var id = UUID()
     var time: Date
     var drinks: Double
+    /// Beer, Wine or Spirits.
+    var kind: String? = nil
 }
 
 struct NapItem: Codable, Identifiable, Hashable {
@@ -28,12 +33,32 @@ enum Severity: Int, Codable, CaseIterable, Identifiable {
     var id: Int { rawValue }
     var label: String {
         switch self {
-        case .notPresent: return "None"
+        case .notPresent: return "Not present"
         case .mild: return "Mild"
         case .moderate: return "Moderate"
         case .severe: return "Severe"
         }
     }
+}
+
+/// How falling asleep compared with what Health recorded.
+enum FallAsleepFeel: String, Codable, CaseIterable, Identifiable {
+    case aboutRight, tookLonger, notSure
+    var id: String { rawValue }
+    var label: String {
+        switch self {
+        case .aboutRight: return "About right"
+        case .tookLonger: return "Took longer"
+        case .notSure: return "Not sure"
+        }
+    }
+}
+
+/// A wake-up the user remembers that Health didn't record.
+struct AddedWake: Codable, Identifiable, Hashable {
+    var id = UUID()
+    var start: Date
+    var minutes: Int
 }
 
 struct CaffeinePreset: Identifiable {
@@ -43,11 +68,9 @@ struct CaffeinePreset: Identifiable {
 
     static let all: [CaffeinePreset] = [
         .init(name: "Coffee", mg: 95),
-        .init(name: "Espresso shot", mg: 64),
-        .init(name: "Black tea", mg: 47),
-        .init(name: "Green tea", mg: 28),
+        .init(name: "Espresso", mg: 64),
+        .init(name: "Tea", mg: 47),
         .init(name: "Cola", mg: 34),
-        .init(name: "Energy drink", mg: 80),
     ]
 }
 
@@ -75,6 +98,15 @@ struct EntryDraft {
     var dizziness: Severity = .notPresent
     var otherEffects: String = ""
     var notes: String = ""
+    // Last night check-in. Kept in the app only, never written to Health.
+    var healthSourceID: String = ""
+    var fallAsleepFeel: FallAsleepFeel? = nil
+    /// Start times of the Health wake-ups the user remembers.
+    var rememberedWakes: [Date] = []
+    var addedWakes: [AddedWake] = []
+    var outOfBed: Date? = nil
+    /// The dose was read from Health's Medications rather than entered in the app.
+    var medicationFromHealth: Bool = false
 
     // Derived numbers, all in minutes.
     var latencyMinutes: Double { max(0, sleepOnset.timeIntervalSince(bedTime) / 60) }
@@ -86,6 +118,8 @@ struct EntryDraft {
         guard tookMedication else { return nil }
         return sleepOnset.timeIntervalSince(medicationTime) / 60
     }
+    /// Caffeine this app logged (Health's own items excluded).
+    var ownCaffeine: [CaffeineItem] { caffeine.filter { !$0.isFromHealth } }
     var totalCaffeineMg: Double { caffeine.reduce(0) { $0 + $1.mg } }
     var totalDrinks: Double { alcohol.reduce(0) { $0 + $1.drinks } }
 
@@ -115,6 +149,14 @@ struct EntryDraft {
         for i in naps.indices {
             naps[i].start = TimeResolver.resolve(naps[i].start, night: night, anchor: .daytime)
         }
+        for i in addedWakes.indices {
+            addedWakes[i].start = TimeResolver.resolve(addedWakes[i].start, night: night, anchor: .evening)
+        }
+        if let o = outOfBed {
+            outOfBed = TimeResolver.resolve(o, night: night, anchor: .morning)
+        }
+        // These belong to a specific Health recording of the old night.
+        rememberedWakes = []
     }
 
     /// A fresh entry for the most likely night, carrying over the routine
@@ -170,6 +212,16 @@ final class DiaryEntry {
     var dizziness: Int = 0
     var otherEffects: String = ""
     var notes: String = ""
+    var healthSourceID: String = ""
+    var fallAsleepFeel: String = ""
+    var rememberedWakesJSON: Data = Data()
+    var addedWakesJSON: Data = Data()
+    var outOfBed: Date? = nil
+    var lastNightConfirmedAt: Date? = nil
+    var medicationConfirmedAt: Date? = nil
+    var yesterdayConfirmedAt: Date? = nil
+    var morningConfirmedAt: Date? = nil
+    var medicationFromHealth: Bool = false
     var updatedAt: Date = Date()
     var healthSyncedAt: Date? = nil
     var healthSyncError: String? = nil
@@ -199,6 +251,12 @@ final class DiaryEntry {
         dizziness = d.dizziness.rawValue
         otherEffects = d.otherEffects
         notes = d.notes
+        healthSourceID = d.healthSourceID
+        fallAsleepFeel = d.fallAsleepFeel?.rawValue ?? ""
+        rememberedWakesJSON = encodeList(d.rememberedWakes)
+        addedWakesJSON = encodeList(d.addedWakes)
+        outOfBed = d.outOfBed
+        medicationFromHealth = d.medicationFromHealth
         updatedAt = Date()
     }
 
@@ -222,7 +280,13 @@ final class DiaryEntry {
             daytimeSleepiness: Severity(rawValue: daytimeSleepiness) ?? .notPresent,
             dizziness: Severity(rawValue: dizziness) ?? .notPresent,
             otherEffects: otherEffects,
-            notes: notes
+            notes: notes,
+            healthSourceID: healthSourceID,
+            fallAsleepFeel: FallAsleepFeel(rawValue: fallAsleepFeel),
+            rememberedWakes: decodeList(rememberedWakesJSON),
+            addedWakes: decodeList(addedWakesJSON),
+            outOfBed: outOfBed,
+            medicationFromHealth: medicationFromHealth
         )
     }
 }
