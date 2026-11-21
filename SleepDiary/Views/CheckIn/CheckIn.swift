@@ -1,4 +1,5 @@
 import Foundation
+import HealthKit
 import SwiftData
 import Observation
 
@@ -53,6 +54,8 @@ final class CheckIn {
     var summaries: [NightSleepSummary] = []
     var sleepLoading = true
     var sleepError: String?
+    /// Health said it hasn't been asked for access yet (the permission sheet never completed).
+    var needsHealthAccess = false
 
     var medication: MedicationLookup?
     var healthCaffeineLoaded = false
@@ -120,14 +123,23 @@ final class CheckIn {
         do {
             summaries = try await health.sleepSummaries(forNight: night)
             sleepError = nil
+            needsHealthAccess = false
         } catch {
             summaries = []
+            needsHealthAccess = (error as? HKError)?.code == .errorAuthorizationNotDetermined
             sleepError = "Couldn't read Health: \(error.localizedDescription)"
         }
         if !summaries.contains(where: { $0.sourceID == d.healthSourceID }) {
             d.healthSourceID = NightSleepSummary.pick(from: summaries, preferred: preferredSource)?.sourceID ?? ""
         }
         if !isDone(.lastNight), let s = current { prefillNight(from: s) }
+    }
+
+    /// Asks for Health access again and reloads the night.
+    func requestHealthAccess(preferredSource: String) async -> HealthAccessResult {
+        let result = await health.requestAuthorization()
+        await loadSleep(preferredSource: preferredSource)
+        return result
     }
 
     /// Switching source re-reads its times (unless already confirmed) and clears

@@ -5,6 +5,7 @@ struct SettingsView: View {
     @Environment(HealthManager.self) private var health
 
     @AppStorage(SettingsKeys.defaultMedicationName) private var defaultMedicationName = ""
+    @State private var accessMessage: String?
     @AppStorage(SettingsKeys.defaultCaffeineMg) private var defaultCaffeineMg = 95.0
     @AppStorage(SettingsKeys.writeSleepToHealth) private var writeSleep = false
     @AppStorage(SettingsKeys.preferredSource) private var preferredSource = ""
@@ -40,12 +41,15 @@ struct SettingsView: View {
                 Section {
                     Toggle("Write naps to Health", isOn: $writeSleep)
                     Button("Ask for Health access again") {
-                        Task { await health.requestAuthorization() }
+                        Task { accessMessage = HealthAccessText.message(for: await health.requestAuthorization()) }
+                    }
+                    if let accessMessage {
+                        Text(accessMessage).font(.footnote).foregroundStyle(.secondary)
                     }
                 } header: {
                     Text("Apple Health")
                 } footer: {
-                    Text("Caffeine, alcohol, grogginess or daytime sleepiness (as Fatigue) and dizziness are always saved to Health. Naps are off by default. Your corrections to the night are kept in the app and never written to Health, so Apple Watch or AutoSleep stays the record. To change permissions: Settings › Health › Data Access & Devices › Sleep Diary.")
+                    Text("Caffeine, alcohol, grogginess, symptoms and (if switched on) naps are saved to Health. Your corrections to the night are kept in the app and never written to Health, so Apple Watch or AutoSleep stays the record. To change permissions: \(HealthAccessText.settingsPath).")
                 }
 
                 Section("Morning reminder") {

@@ -15,6 +15,7 @@ struct HomeView: View {
     @State private var checkIn: CheckIn?
     @State private var path: [CheckInRoute] = []
     @State private var showingSettings = false
+    @State private var accessMessage: String?
 
     var body: some View {
         NavigationStack(path: $path) {
@@ -142,6 +143,20 @@ struct HomeView: View {
                     bigStat(Fmt.hm(s.inBedSpanMinutes.map { max(0, $0 - s.asleepMinutes) }), "awake")
                 }
                 HypnogramView(summary: s, compact: true)
+            } else if checkIn.needsHealthAccess {
+                Text("Sleep Diary doesn't have access to Apple Health yet, so it can't read last night.")
+                    .font(.system(size: 14))
+                    .foregroundStyle(Theme.secondary)
+                Button("Allow Health access") {
+                    Task {
+                        let result = await checkIn.requestHealthAccess(preferredSource: preferredSource)
+                        accessMessage = HealthAccessText.message(for: result)
+                    }
+                }
+                .buttonStyle(WideButtonStyle())
+                if let accessMessage {
+                    Text(accessMessage).font(.system(size: 13)).foregroundStyle(Theme.secondary)
+                }
             } else {
                 Text(checkIn.sleepError ?? "No sleep found in Health for \(Fmt.weekday(checkIn.night)) night.")
                     .font(.system(size: 14))

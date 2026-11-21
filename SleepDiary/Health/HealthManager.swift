@@ -22,6 +22,16 @@ enum MedicationLookup: Equatable {
     case notSet
 }
 
+/// What happened when the app asked for Health access.
+enum HealthAccessResult: Equatable {
+    /// iOS showed the permission sheet.
+    case asked
+    /// iOS had an answer already, so it showed nothing. Changes go through the Health app.
+    case alreadyAnswered
+    case unavailable
+    case failed(String)
+}
+
 /// One line of "what was written to Apple Health" for the Saved screen.
 struct HealthWriteLine: Identifiable, Hashable {
     let label: String
@@ -69,12 +79,19 @@ final class HealthManager {
         #endif
     }
 
-    func requestAuthorization() async {
-        guard isAvailable, !skipAuthorization else { return }
+    @discardableResult
+    func requestAuthorization() async -> HealthAccessResult {
+        guard isAvailable else { return .unavailable }
+        guard !skipAuthorization else { return .alreadyAnswered }
+        let status = try? await store.statusForAuthorizationRequest(toShare: Self.writeTypes, read: Self.readTypes)
         do {
             try await store.requestAuthorization(toShare: Self.writeTypes, read: Self.readTypes)
+            lastError = nil
+            return status == .unnecessary ? .alreadyAnswered : .asked
         } catch {
             lastError = error.localizedDescription
+            print("Sleep Diary: Health authorization failed: \(error)")
+            return .failed(error.localizedDescription)
         }
     }
 
